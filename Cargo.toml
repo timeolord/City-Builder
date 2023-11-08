@@ -6,7 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+array2d = "0.3.0"
 bevy = "0.11.2"
+bevy_mod_raycast = "0.14.1"
 bevy_rapier3d = "0.22.0"
 image = "0.24.7"
+noise = "0.8.2"
 smooth-bevy-cameras = "0.9.0"

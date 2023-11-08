@@ -2,6 +2,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
 };
+use bevy_mod_raycast::RaycastSource;
 use smooth_bevy_cameras::{
     controllers::orbit::{
         ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
@@ -9,7 +10,13 @@ use smooth_bevy_cameras::{
     LookTransform, LookTransformPlugin,
 };
 
-use crate::constants::DEBUG;
+use crate::{
+    constants::DEBUG,
+    world::{world_position_to_chunk_tile_position, WorldSettings},
+    GameState,
+};
+
+use super::cursor::RaycastSet;
 
 pub struct CameraPlugin;
 
@@ -21,8 +28,12 @@ impl Plugin for CameraPlugin {
             },
             LookTransformPlugin,
         ));
-        app.add_systems(Startup, setup);
-        app.add_systems(Update, input);
+        app.add_systems(OnEnter(GameState::AssetBuilder), setup);
+        app.add_systems(OnEnter(GameState::World), setup);
+        app.add_systems(
+            Update,
+            input.run_if(in_state(GameState::AssetBuilder).or_else(in_state(GameState::World))),
+        );
     }
 }
 
@@ -35,6 +46,7 @@ pub fn input(
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
     mut gizmos: Gizmos,
+    world_settings: Option<Res<WorldSettings>>,
 ) {
     //Modified from smooth_bevy_cameras
     // Can only control one camera at a time.
@@ -64,14 +76,35 @@ pub fn input(
         cursor_delta += event.delta;
     }
 
+    //World Camera
+    match world_settings {
+        Some(ref world_setting) => {
+            //todo add lerping or use a raycast
+            let (chunk_position, tile_position) =
+                world_position_to_chunk_tile_position(transform.target, world_setting);
+            let height = world_setting.heightmaps
+                [(chunk_position.x as usize, chunk_position.y as usize)]
+                [(tile_position.x as usize, tile_position.z as usize)][4];
+            transform.target.y = height + 0.1;
+            //println!(
+            //    "{:?}, {:?}, {:?}",
+            //    transform.target, chunk_position, tile_position
+            //);
+        }
+        None => {}
+    }
+
     if mouse_buttons.pressed(MouseButton::Middle) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
     }
 
+    //TODO Fix this
     /* if mouse_buttons.pressed(MouseButton::Right) {
-        events.send(ControlEvent::TranslateTarget(
-            mouse_translate_sensitivity * cursor_delta,
-        ));
+        let delta = mouse_translate_sensitivity * 0.05 * cursor_delta;
+        transform.target.x -= delta.x;
+        transform.target.z -= delta.y;
+        transform.eye.x -= delta.x;
+        transform.eye.z -= delta.y;
     } */
 
     //Keyboard camera translation
@@ -108,10 +141,9 @@ pub fn input(
         transform.eye -= left.normalize() * mouse_translate_sensitivity.y;
     }
 
-    if transform.eye.y < 0.1 {
-        transform.eye.y = 0.1;
+    if transform.eye.y < transform.target.y {
+        transform.eye.y = transform.target.y;
     }
-    transform.target.y = 0.0;
 
     if DEBUG {
         gizmos.sphere(transform.target, Quat::IDENTITY, 0.1, Color::RED);
@@ -154,5 +186,6 @@ fn setup(mut commands: Commands) {
     //Spawn Camera
     commands
         .spawn(orbit_camera_bundle)
-        .insert(Camera3dBundle::default());
+        .insert(Camera3dBundle::default())
+        .insert(RaycastSource::<RaycastSet>::new());
 }
