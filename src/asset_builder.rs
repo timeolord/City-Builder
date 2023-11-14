@@ -3,7 +3,7 @@ use bevy::prelude::*;
 
 use crate::{
     camera::CameraPlugin,
-    chunk::{spawn_chunk, ChunkResource},
+    chunk::{ChunkPosition, SpawnChunkEvent},
     cursor::CursorPlugin,
     GameState,
 };
@@ -24,18 +24,13 @@ struct AssetBuilderEntity;
 
 fn setup(
     mut commands: Commands,
-    chunk_resources: Res<ChunkResource>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    mut spawn_chunk_event: EventWriter<SpawnChunkEvent>,
 ) {
     // plane
-    spawn_chunk(
-        &mut commands,
-        &mut meshes,
-        (0.0, 0.0),
-        chunk_resources.as_ref(),
-        AssetBuilderEntity,
-        None,
-    );
+    spawn_chunk_event.send(SpawnChunkEvent {
+        position: ChunkPosition { position: [0, 0] },
+        heightmap: None,
+    });
 
     // light
     commands.spawn(PointLightBundle {

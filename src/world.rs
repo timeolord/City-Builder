@@ -1,24 +1,34 @@
 pub mod heightmap_generator;
+pub mod road;
 pub mod terraform;
+pub mod tile_highlight;
+pub mod tools;
 use std::f32::consts::PI;
 
 use crate::{
-    chunk::{spawn_chunk, ChunkResource},
-    constants::{CHUNK_SIZE, TILE_SIZE},
+    chunk::{ChunkPosition, Grid, SpawnChunkEvent},
     GameState,
 };
-use array2d::Array2D;
 use bevy::{pbr::CascadeShadowConfigBuilder, prelude::*};
 
-use self::heightmap_generator::Heightmap;
+use self::{
+    road::RoadPlugin, terraform::TerraformPlugin, tile_highlight::TileHighlightPlugin,
+    tools::ToolsPlugin,
+};
 
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins((
+            TerraformPlugin,
+            RoadPlugin,
+            ToolsPlugin,
+            TileHighlightPlugin,
+        ));
         app.add_systems(Startup, init);
         app.add_systems(OnEnter(GameState::World), setup);
-        // app.add_systems(Update, input.run_if(in_state(GameState::World)));
+        app.add_systems(Update, toggle_grid.run_if(in_state(GameState::World)));
         app.add_systems(OnExit(GameState::World), exit);
     }
 }
@@ -36,34 +46,35 @@ struct WorldEntity;
 pub struct WorldSettings {
     pub world_size: (usize, usize),
     pub seed: u32,
-    pub heightmaps: Array2D<Heightmap>,
+    pub grid_visibility: Visibility,
 }
 
 fn init(mut commands: Commands) {
     let world_size = (4, 4);
     let seed = 0;
-    let mut heightmaps = Array2D::filled_with(
-        heightmap_generator::generate_heightmap(seed, (0, 0)),
-        world_size.0,
-        world_size.1,
-    );
-    for x in 0..world_size.0 as usize {
+    /* let mut heightmaps = Heightmaps {
+        heightmaps: Array2D::filled_with(
+            heightmap_generator::generate_heightmap(seed, (0, 0)),
+            world_size.0,
+            world_size.1,
+        ),
+    }; */
+    /* for x in 0..world_size.0 as usize {
         for y in 0..world_size.1 as usize {
-            heightmaps[(x, y)] = heightmap_generator::generate_heightmap(seed, (x, y));
+            heightmaps[[x, y]] = heightmap_generator::generate_heightmap(seed, (x, y));
         }
-    }
+    } */
     commands.insert_resource(WorldSettings {
         world_size,
         seed,
-        heightmaps,
+        grid_visibility: Visibility::Visible,
     });
 }
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    chunk_resources: Res<ChunkResource>,
     world_settings: Res<WorldSettings>,
+    mut spawn_chunk_event: EventWriter<SpawnChunkEvent>,
 ) {
     // Sun
     commands.spawn(DirectionalLightBundle {
@@ -88,49 +99,49 @@ fn setup(
     });
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.1,
+        brightness: 0.2,
     });
 
     let world_size = world_settings.world_size.clone();
     for x in 0..world_size.0 {
         for y in 0..world_size.1 {
-            spawn_chunk::<WorldEntity>(
-                &mut commands,
-                &mut meshes,
-                ((x * CHUNK_SIZE) as f32, (y * CHUNK_SIZE) as f32),
-                chunk_resources.as_ref(),
-                WorldEntity,
-                Some(&world_settings.heightmaps[(x as usize, y as usize)]),
-            );
+            spawn_chunk_event.send(SpawnChunkEvent {
+                position: ChunkPosition { position: [x, y] },
+                heightmap: Some(heightmap_generator::generate_heightmap(
+                    world_settings.seed,
+                    ChunkPosition { position: [x, y] },
+                )),
+            });
         }
     }
 }
 
-pub fn world_position_to_tile_position(world_position: Vec3) -> Vec3 {
-    let mut tile_position = world_position;
-    tile_position.x -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
-    tile_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
-    tile_position.x = tile_position.x.floor();
-    tile_position.y = tile_position.y.floor();
-    tile_position.z = tile_position.z.floor();
-    tile_position = tile_position.clamp(Vec3::ZERO, Vec3::from_array([CHUNK_SIZE as f32 - 1.0; 3]));
-    tile_position
+trait ToF32<T, const N: usize> {
+    fn to_f32(&self) -> [f32; N];
 }
-pub fn world_position_to_chunk_tile_position(
-    world_position: Vec3,
-    world_settings: &WorldSettings,
-) -> (Vec2, Vec3) {
-    let mut tile_position = world_position_to_tile_position(world_position);
-    let mut chunk_position = Vec2::new(
-        (tile_position.x / CHUNK_SIZE as f32).floor() + 1.0,
-        (tile_position.z / CHUNK_SIZE as f32).floor() + 1.0,
-    );
-    let world_size = (
-        world_settings.world_size.0 as f32 - 1.0,
-        world_settings.world_size.1 as f32 - 1.0,
-    );
-    chunk_position = chunk_position.clamp(Vec2::ZERO, Vec2::from(world_size));
-    tile_position.x -= (chunk_position.x - 1.0) * CHUNK_SIZE as f32;
-    tile_position.z -= (chunk_position.y - 1.0) * CHUNK_SIZE as f32;
-    (chunk_position, tile_position)
+impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> ToF32<T, N> for [T; N] {
+    fn to_f32(&self) -> [f32; N] {
+        let mut array = [0.0; N];
+        for (i, item) in self.iter().enumerate() {
+            array[i] = (*item).as_();
+        }
+        array
+    }
+}
+
+fn toggle_grid(
+    mut query: Query<&mut Visibility, With<Grid>>,
+    keyboard: Res<Input<KeyCode>>,
+    mut grid_visible: ResMut<WorldSettings>,
+) {
+    if keyboard.just_pressed(KeyCode::G) {
+        grid_visible.grid_visibility = match grid_visible.grid_visibility {
+            Visibility::Visible => Visibility::Hidden,
+            Visibility::Hidden => Visibility::Visible,
+            Visibility::Inherited => Visibility::Inherited,
+        };
+        for mut visible in query.iter_mut() {
+            *visible = grid_visible.grid_visibility;
+        }
+    }
 }

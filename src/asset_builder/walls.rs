@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_mod_raycast::RaycastMesh;
+use bevy_mod_raycast::prelude::RaycastMesh;
 
 use crate::{
     constants::{DEBUG, TILE_SIZE, WALL_HEIGHT, WALL_THICKNESS},

@@ -1,7 +1,12 @@
 use bevy::prelude::*;
-use bevy_mod_raycast::{prelude::*, DefaultRaycastingPlugin};
+use bevy_mod_raycast::prelude::*;
 
-use crate::{chunk::Chunk, world::{WorldSettings, world_position_to_chunk_tile_position}, GameState};
+use crate::{
+    chunk::{Chunk, ChunkTilePosition},
+    constants::TILE_SIZE,
+    world::{heightmap_generator::Heightmap, tile_highlight::HighlightTileEvent, WorldSettings},
+    GameState,
+};
 
 #[derive(Reflect)]
 pub struct RaycastSet;
@@ -9,54 +14,64 @@ pub struct RaycastSet;
 #[derive(Event)]
 pub struct CursorMovedTile(Vec2);
 
+#[derive(Resource, Clone, Copy)]
+pub struct CurrentTile {
+    pub position: ChunkTilePosition,
+}
+
 pub struct CursorPlugin;
 impl Plugin for CursorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(DefaultRaycastingPlugin::<RaycastSet>::default());
+        app.insert_resource({
+            CurrentTile {
+                position: ChunkTilePosition::default(),
+            }
+        });
+        app.add_plugins(DeferredRaycastingPlugin::<RaycastSet>::default());
+        app.insert_resource(RaycastPluginState::<RaycastSet>::default());
         app.add_systems(
-            Update,
-            (
-                update_raycast_with_cursor.before(RaycastSystem::BuildRays::<RaycastSet>),
-                vertex_cursor,
-            )
-                .chain()
+            PreUpdate,
+            (tile_cursor)
                 .run_if(in_state(GameState::AssetBuilder).or_else(in_state(GameState::World))),
         );
     }
 }
 
-// Update our `RaycastSource` with the current cursor position every frame.
-fn update_raycast_with_cursor(
-    mut cursor: EventReader<CursorMoved>,
-    mut query: Query<&mut RaycastSource<RaycastSet>>,
-) {
-    // Grab the most recent cursor event if it exists:
-    let Some(cursor_moved) = cursor.iter().last() else {
-        return;
-    };
-    for mut pick_source in &mut query {
-        pick_source.cast_method = RaycastMethod::Screenspace(cursor_moved.position);
-    }
-}
-
-fn vertex_cursor(
-    meshes: Query<&RaycastMesh<RaycastSet>, With<Chunk>>,
-    mut gizmos: Gizmos
-) {
+/* fn vertex_cursor(meshes: Query<&RaycastMesh<RaycastSet>, With<Chunk>>, mut gizmos: Gizmos) {
     for (_, intersection) in meshes.iter().flat_map(|mesh| mesh.intersections.iter()) {
         //Snap the cursor to tiles
         let mut rounded_position = intersection.position();
         rounded_position.x = rounded_position.x.round();
         rounded_position.z = rounded_position.z.round();
 
-        /* //Snap the cursor to the heightmap if it exists
-        match world_settings {
-            Some(ref world_setting) => {
-                let (chunk_pos, tile_pos) = world_position_to_chunk_tile_position(intersection.position(), world_setting);
-                rounded_position.y = world_setting.heightmaps[(chunk_pos.x as usize, chunk_pos.y as usize)][(tile_pos.x as usize, tile_pos.z as usize)][0];
-            },
-            None => {},
-        } */
         gizmos.sphere(rounded_position, Quat::IDENTITY, 0.1, Color::RED);
+    }
+} */
+fn tile_cursor(
+    meshes: Query<(&RaycastMesh<RaycastSet>, &Heightmap), With<Chunk>>,
+    world_settings: Option<Res<WorldSettings>>,
+    mut current_tile: ResMut<CurrentTile>,
+    mut highlight_tile_events: EventWriter<HighlightTileEvent>,
+) {
+    for (intersection_mesh, _) in meshes.iter() {
+        for (_, intersection) in intersection_mesh.intersections.iter() {
+            //Sets the current tile resource
+            match world_settings {
+                Some(_) => {
+                    let mut intersection_pos = intersection.position();
+                    intersection_pos[0] += 0.5 * TILE_SIZE;
+                    intersection_pos[2] += 0.5 * TILE_SIZE;
+
+                    current_tile.position =
+                        ChunkTilePosition::from_world_position(intersection_pos);
+
+                    highlight_tile_events.send(HighlightTileEvent {
+                        position: current_tile.position,
+                        color: Color::BLUE,
+                    });
+                }
+                None => {}
+            }
+        }
     }
 }

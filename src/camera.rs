@@ -2,7 +2,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
 };
-use bevy_mod_raycast::RaycastSource;
+use bevy_mod_raycast::prelude::RaycastSource;
 use smooth_bevy_cameras::{
     controllers::orbit::{
         ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
@@ -11,8 +11,9 @@ use smooth_bevy_cameras::{
 };
 
 use crate::{
+    chunk::{ChunkPosition, ChunkTilePosition},
     constants::DEBUG,
-    world::{world_position_to_chunk_tile_position, WorldSettings},
+    world::{heightmap_generator::Heightmap, WorldSettings},
     GameState,
 };
 
@@ -47,6 +48,7 @@ pub fn input(
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
     mut gizmos: Gizmos,
     world_settings: Option<Res<WorldSettings>>,
+    heightmaps: Query<(&ChunkPosition, &Heightmap)>,
 ) {
     //Modified from smooth_bevy_cameras
     // Can only control one camera at a time.
@@ -72,23 +74,33 @@ pub fn input(
     } = *controller;
 
     let mut cursor_delta = Vec2::ZERO;
-    for event in mouse_motion_events.iter() {
+    for event in mouse_motion_events.read() {
         cursor_delta += event.delta;
     }
 
     //World Camera
     match world_settings {
-        Some(ref world_setting) => {
+        Some(_) => {
             //todo add lerping or use a raycast
-            let (chunk_position, tile_position) =
-                world_position_to_chunk_tile_position(transform.target, world_setting);
-            let height = world_setting.heightmaps
-                [(chunk_position.x as usize, chunk_position.y as usize)]
-                [(tile_position.x as usize, tile_position.z as usize)][4];
-            transform.target.y = height + 0.1;
+            let chunk_tile_position = ChunkTilePosition::from_world_position(transform.target);
+            match heightmaps
+                .iter()
+                .find(|(chunk, _)| **chunk == chunk_tile_position.chunk_position)
+            {
+                Some((_, heightmap)) => {
+                    let height = heightmap[chunk_tile_position.tile_position_2d()]
+                        .into_iter()
+                        .reduce(f32::max)
+                        .unwrap();
+                    transform.target.y = height + 0.1;
+                }
+                None => {}
+            }
             //println!(
             //    "{:?}, {:?}, {:?}",
-            //    transform.target, chunk_position, tile_position
+            //    transform.target,
+            //    chunk_tile_position.chunk_position,
+            //    chunk_tile_position.tile_position_2d()
             //);
         }
         None => {}
@@ -151,7 +163,7 @@ pub fn input(
 
     // Zoom
     let mut scalar = 1.0;
-    for event in mouse_wheel_reader.iter() {
+    for event in mouse_wheel_reader.read() {
         // scale the event magnitude per pixel or per line
         let scroll_amount = match event.unit {
             MouseScrollUnit::Line => event.y,
@@ -187,5 +199,5 @@ fn setup(mut commands: Commands) {
     commands
         .spawn(orbit_camera_bundle)
         .insert(Camera3dBundle::default())
-        .insert(RaycastSource::<RaycastSet>::new());
+        .insert(RaycastSource::<RaycastSet>::new_cursor());
 }
