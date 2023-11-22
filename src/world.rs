@@ -1,19 +1,24 @@
+pub mod buildings;
+pub mod game_time;
 pub mod heightmap_generator;
 pub mod road;
 pub mod terraform;
 pub mod tile_highlight;
 pub mod tools;
+pub mod vehicles;
+pub mod resources;
 use std::f32::consts::PI;
 
 use crate::{
-    chunk::{ChunkPosition, Grid, SpawnChunkEvent},
+    chunk::{chunk_tile_position::ChunkPosition, Grid, SpawnChunkEvent},
     GameState,
 };
 use bevy::{pbr::CascadeShadowConfigBuilder, prelude::*};
 
 use self::{
-    road::RoadPlugin, terraform::TerraformPlugin, tile_highlight::TileHighlightPlugin,
-    tools::ToolsPlugin,
+    buildings::BuildingsPlugin, game_time::GameTimePlugin, road::RoadPlugin,
+    terraform::TerraformPlugin, tile_highlight::TileHighlightPlugin, tools::ToolsPlugin,
+    vehicles::VehiclesPlugin, resources::ResourcesPlugin,
 };
 
 pub struct WorldPlugin;
@@ -25,6 +30,10 @@ impl Plugin for WorldPlugin {
             RoadPlugin,
             ToolsPlugin,
             TileHighlightPlugin,
+            BuildingsPlugin,
+            GameTimePlugin,
+            VehiclesPlugin,
+            ResourcesPlugin,
         ));
         app.add_systems(Startup, init);
         app.add_systems(OnEnter(GameState::World), setup);
@@ -44,26 +53,14 @@ struct WorldEntity;
 
 #[derive(Resource)]
 pub struct WorldSettings {
-    pub world_size: (usize, usize),
+    pub world_size: [usize; 2],
     pub seed: u32,
     pub grid_visibility: Visibility,
 }
 
 fn init(mut commands: Commands) {
-    let world_size = (4, 4);
+    let world_size = [4, 4];
     let seed = 0;
-    /* let mut heightmaps = Heightmaps {
-        heightmaps: Array2D::filled_with(
-            heightmap_generator::generate_heightmap(seed, (0, 0)),
-            world_size.0,
-            world_size.1,
-        ),
-    }; */
-    /* for x in 0..world_size.0 as usize {
-        for y in 0..world_size.1 as usize {
-            heightmaps[[x, y]] = heightmap_generator::generate_heightmap(seed, (x, y));
-        }
-    } */
     commands.insert_resource(WorldSettings {
         world_size,
         seed,
@@ -103,8 +100,8 @@ fn setup(
     });
 
     let world_size = world_settings.world_size.clone();
-    for x in 0..world_size.0 {
-        for y in 0..world_size.1 {
+    for x in 0..world_size[0] {
+        for y in 0..world_size[1] {
             spawn_chunk_event.send(SpawnChunkEvent {
                 position: ChunkPosition { position: [x, y] },
                 heightmap: Some(heightmap_generator::generate_heightmap(
@@ -116,12 +113,36 @@ fn setup(
     }
 }
 
-trait ToF32<T, const N: usize> {
-    fn to_f32(&self) -> [f32; N];
+trait AsF32<T, const N: usize> {
+    fn as_f32(&self) -> [f32; N];
 }
-impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> ToF32<T, N> for [T; N] {
-    fn to_f32(&self) -> [f32; N] {
+impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> AsF32<T, N> for [T; N] {
+    fn as_f32(&self) -> [f32; N] {
         let mut array = [0.0; N];
+        for (i, item) in self.iter().enumerate() {
+            array[i] = (*item).as_();
+        }
+        array
+    }
+}
+trait AsU32<T, const N: usize> {
+    fn as_u32(&self) -> [u32; N];
+}
+impl<T: num_traits::cast::AsPrimitive<u32>, const N: usize> AsU32<T, N> for [T; N] {
+    fn as_u32(&self) -> [u32; N] {
+        let mut array = [0; N];
+        for (i, item) in self.iter().enumerate() {
+            array[i] = (*item).as_();
+        }
+        array
+    }
+}
+trait AsI32<T, const N: usize> {
+    fn as_i32(&self) -> [i32; N];
+}
+impl<T: num_traits::cast::AsPrimitive<i32>, const N: usize> AsI32<T, N> for [T; N] {
+    fn as_i32(&self) -> [i32; N] {
+        let mut array = [0; N];
         for (i, item) in self.iter().enumerate() {
             array[i] = (*item).as_();
         }

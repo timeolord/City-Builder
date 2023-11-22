@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{GameState, chunk::ChunkTilePosition};
+use crate::{chunk::chunk_tile_position::ChunkTilePosition, GameState};
 
 pub struct ToolsPlugin;
 
@@ -53,6 +53,8 @@ pub enum ToolType {
     VertexEditor,
     TileEditor,
     BuildRoad,
+    BuildResidentialBuilding,
+    BuildCommercialBuilding,
 }
 impl ToolType {
     pub fn next_tool(self) -> Self {
@@ -60,7 +62,9 @@ impl ToolType {
             ToolType::None => ToolType::VertexEditor,
             ToolType::VertexEditor => ToolType::TileEditor,
             ToolType::TileEditor => ToolType::BuildRoad,
-            ToolType::BuildRoad => ToolType::None,
+            ToolType::BuildRoad => ToolType::BuildResidentialBuilding,
+            ToolType::BuildResidentialBuilding => ToolType::BuildCommercialBuilding,
+            ToolType::BuildCommercialBuilding => ToolType::None,
         }
     }
 }

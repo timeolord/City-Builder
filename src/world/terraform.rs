@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use bevy::prelude::*;
 
 use crate::{
-    chunk::{ChunkPosition, ChunkTilePosition, SpawnChunkEvent},
+    chunk::{SpawnChunkEvent, chunk_tile_position::{ChunkTilePosition, ChunkPosition}},
     constants::DEBUG,
     cursor::CurrentTile,
     GameState,

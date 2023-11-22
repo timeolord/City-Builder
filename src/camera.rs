@@ -11,10 +11,9 @@ use smooth_bevy_cameras::{
 };
 
 use crate::{
-    chunk::{ChunkPosition, ChunkTilePosition},
     constants::DEBUG,
     world::{heightmap_generator::Heightmap, WorldSettings},
-    GameState,
+    GameState, chunk::chunk_tile_position::{ChunkPosition, ChunkTilePosition},
 };
 
 use super::cursor::RaycastSet;
@@ -96,12 +95,6 @@ pub fn input(
                 }
                 None => {}
             }
-            //println!(
-            //    "{:?}, {:?}, {:?}",
-            //    transform.target,
-            //    chunk_tile_position.chunk_position,
-            //    chunk_tile_position.tile_position_2d()
-            //);
         }
         None => {}
     }

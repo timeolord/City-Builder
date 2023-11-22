@@ -7,6 +7,7 @@ pub mod cursor;
 mod menu;
 mod world;
 use bevy::prelude::*;
+use constants::DEFAULT_TIMESTEP;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
@@ -27,5 +28,6 @@ fn main() {
     App::new()
         .add_state::<GameState>()
         .add_plugins(plugins)
+        .insert_resource(Time::<Fixed>::from_seconds(DEFAULT_TIMESTEP))
         .run();
 }

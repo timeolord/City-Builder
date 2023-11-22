@@ -1,12 +1,7 @@
 pub mod walls;
 use bevy::prelude::*;
 
-use crate::{
-    camera::CameraPlugin,
-    chunk::{ChunkPosition, SpawnChunkEvent},
-    cursor::CursorPlugin,
-    GameState,
-};
+use crate::{camera::CameraPlugin, chunk::{SpawnChunkEvent, chunk_tile_position::ChunkPosition}, cursor::CursorPlugin, GameState};
 
 use self::walls::WallsPlugin;
 
@@ -22,10 +17,7 @@ impl Plugin for AssetBuilderPlugin {
 #[derive(Component)]
 struct AssetBuilderEntity;
 
-fn setup(
-    mut commands: Commands,
-    mut spawn_chunk_event: EventWriter<SpawnChunkEvent>,
-) {
+fn setup(mut commands: Commands, mut spawn_chunk_event: EventWriter<SpawnChunkEvent>) {
     // plane
     spawn_chunk_event.send(SpawnChunkEvent {
         position: ChunkPosition { position: [0, 0] },

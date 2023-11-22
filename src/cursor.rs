@@ -2,8 +2,10 @@ use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
 use crate::{
-    chunk::{Chunk, ChunkTilePosition},
-    constants::TILE_SIZE,
+    chunk::{
+        chunk_tile_position::{ChunkPosition, ChunkTilePosition},
+        Chunk,
+    },
     world::{heightmap_generator::Heightmap, tile_highlight::HighlightTileEvent, WorldSettings},
     GameState,
 };
@@ -52,15 +54,15 @@ fn tile_cursor(
     world_settings: Option<Res<WorldSettings>>,
     mut current_tile: ResMut<CurrentTile>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
+    mut gizmos: Gizmos,
+    heightmaps: Query<(&Heightmap, &ChunkPosition)>,
 ) {
     for (intersection_mesh, _) in meshes.iter() {
         for (_, intersection) in intersection_mesh.intersections.iter() {
             //Sets the current tile resource
             match world_settings {
                 Some(_) => {
-                    let mut intersection_pos = intersection.position();
-                    intersection_pos[0] += 0.5 * TILE_SIZE;
-                    intersection_pos[2] += 0.5 * TILE_SIZE;
+                    let intersection_pos = intersection.position();
 
                     current_tile.position =
                         ChunkTilePosition::from_world_position(intersection_pos);
@@ -69,6 +71,17 @@ fn tile_cursor(
                         position: current_tile.position,
                         color: Color::BLUE,
                     });
+
+                    let heightmap = heightmaps
+                        .iter()
+                        .find(|(_, chunk_position)| {
+                            **chunk_position == current_tile.position.chunk_position
+                        })
+                        .unwrap()
+                        .0;
+
+                    let pos = heightmap.get_from_world_position(intersection_pos);
+                    gizmos.sphere(pos, Quat::IDENTITY, 0.5, Color::SALMON);
                 }
                 None => {}
             }
