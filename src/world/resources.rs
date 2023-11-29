@@ -1,12 +1,10 @@
-use std::marker::PhantomData;
-
 use bevy::prelude::*;
 use enum_map::*;
 
 pub struct ResourcesPlugin;
 
 impl Plugin for ResourcesPlugin {
-    fn build(&self, app: &mut App) {
+    fn build(&self, _app: &mut App) {
         //app.add_systems(OnEnter(GameState::World), setup);
         //app.add_systems(
         //    Update,

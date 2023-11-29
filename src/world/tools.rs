@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{chunk::chunk_tile_position::ChunkTilePosition, GameState};
+use crate::{chunk::chunk_tile_position::TilePosition, GameState};
 
 pub struct ToolsPlugin;
 
@@ -16,7 +16,7 @@ fn setup(mut commands: Commands) {
     commands.insert_resource(CurrentTool {
         tool_type: ToolType::None,
         tool_strength: 0.0,
-        tool_increase_amount: 1.1,
+        tool_increase_amount: 1.0,
         starting_point: None,
         ending_point: None,
     });
@@ -33,9 +33,11 @@ fn tool_select(keyboard: Res<Input<KeyCode>>, mut tool_resource: ResMut<CurrentT
     }
     if keyboard.just_pressed(KeyCode::O) {
         tool_resource.tool_strength += tool_resource.tool_increase_amount;
+        println!("Tool Strength: {}", tool_resource.tool_strength)
     }
     if keyboard.just_pressed(KeyCode::L) {
         tool_resource.tool_strength -= tool_resource.tool_increase_amount;
+        println!("Tool Strength: {}", tool_resource.tool_strength)
     }
 }
 
@@ -44,8 +46,8 @@ pub struct CurrentTool {
     pub tool_type: ToolType,
     pub tool_strength: f32,
     pub tool_increase_amount: f32,
-    pub starting_point: Option<ChunkTilePosition>,
-    pub ending_point: Option<ChunkTilePosition>,
+    pub starting_point: Option<TilePosition>,
+    pub ending_point: Option<TilePosition>,
 }
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ToolType {

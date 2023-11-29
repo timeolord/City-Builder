@@ -1,12 +1,15 @@
 use bevy::prelude::*;
 
-use crate::{chunk::chunk_tile_position::ChunkTilePosition, GameState};
+use crate::{
+    chunk::chunk_tile_position::TilePosition,
+    GameState,
+};
 
 use super::{
     buildings::ResidentialBuilding,
+    heightmap::HeightmapsResource,
     resources::{Inventory, InventoryType},
     road::pathfinding::Pathfind,
-    AsF32,
 };
 
 pub struct VehiclesPlugin;
@@ -28,7 +31,7 @@ pub struct VehicleCompletedGoal {
 }
 #[derive(Component)]
 pub struct VehiclePosition {
-    pub position: ChunkTilePosition,
+    pub position: TilePosition,
 }
 #[derive(Component)]
 pub struct VehicleSpeed {
@@ -85,47 +88,46 @@ fn move_vehicle(
         ),
         Without<VehicleCompletedGoal>,
     >,
+    heightmaps: Res<HeightmapsResource>,
 ) {
     for (entity, speed, mut goals, mut pathfind, mut tile_position, mut transform) in
         vehicle_query.iter_mut()
     {
-        if ChunkTilePosition::from_tile_position_2d(
+        //Check if the car has reached the end of the path and if so, complete the current goal
+        if TilePosition::from_position_2d(
             *pathfind.path.last().expect("Path should not be empty"),
         )
         .to_world_position()
         .xz()
         .abs_diff_eq(transform.translation.xz(), speed.speed * 2.0)
         {
-            //Arrived
             commands.entity(entity).insert(VehicleCompletedGoal {
                 goal: goals.goals.pop().expect("Goals should not be empty"),
             });
             continue;
         }
 
-        let direction = Vec2::from_array(pathfind.path[pathfind.current_index].as_f32())
-            - Vec2::from_array(tile_position.position.as_tile_position_2d().as_f32());
+        //Move the car towards the next tile
+        let direction = pathfind.path[pathfind.current_index].as_vec2()
+            - tile_position.position.position_2d().as_vec2();
         let velocity = direction.round().normalize_or_zero() * speed.speed;
-        //println!(
-        //    "{:?} {:?} {:?}",
-        //    Vec2::from_array(pathfind.path[pathfind.current_index].as_f32()),
-        //    Vec2::from_array(tile_position.position.as_tile_position_2d().as_f32(),),
-        //    pathfind.path
-        //);
         let velocity3 = Vec3::new(velocity.x, 0.0, velocity.y);
         transform.translation += velocity3;
 
-        if ChunkTilePosition::from_tile_position_2d(pathfind.path[pathfind.current_index])
+        //If the car has reached the next tile, increment the index
+        if TilePosition::from_position_2d(pathfind.path[pathfind.current_index])
             .to_world_position()
             .xz()
             .abs_diff_eq(transform.translation.xz(), speed.speed * 2.0)
         {
-            //tile_position.position = ChunkTilePosition::from_world_position(transform.translation);
             tile_position.position =
-                ChunkTilePosition::from_tile_position_2d(pathfind.path[pathfind.current_index]);
+                TilePosition::from_position_2d(pathfind.path[pathfind.current_index]);
             pathfind.current_index += 1;
             pathfind.current_index = pathfind.current_index.clamp(0, pathfind.path.len() - 1);
         }
+
+        //Sticks the car to the ground
+        transform.translation = heightmaps.get_from_world_position(transform.translation);
     }
 }
 

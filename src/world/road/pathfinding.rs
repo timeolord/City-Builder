@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 
 use crate::{
-    chunk::chunk_tile_position::{ChunkTilePosition, TilePosition2D},
+    chunk::chunk_tile_position::{TilePosition, TilePosition2D},
     constants::DEBUG,
     world::{buildings::NeedsPathFinding, tile_highlight::HighlightTileEvent},
     GameState,
 };
 
-use super::OccupiedRoadTiles;
+use super::RoadTilesResource;
 
 pub struct PathfindingPlugin;
 
@@ -34,47 +34,23 @@ pub struct Pathfind {
 pub type Distance = usize;
 pub type Path = Vec<TilePosition2D>;
 
-/* fn test(
-    mut find_path_events: EventWriter<FindPathEvent>,
-    occupied_road_tiles: Res<OccupiedRoadTiles>,
-    keyboard: Res<Input<KeyCode>>,
-) {
-    if keyboard.just_pressed(KeyCode::H) {
-        let random_road_tile_1_index = rand::random::<usize>() % occupied_road_tiles.tiles.len();
-        let random_road_tile_2_index = rand::random::<usize>() % occupied_road_tiles.tiles.len();
-        let random_road_tile_1 = occupied_road_tiles
-            .tiles
-            .keys()
-            .nth(random_road_tile_1_index)
-            .unwrap();
-        let random_road_tile_2 = occupied_road_tiles
-            .tiles
-            .keys()
-            .nth(random_road_tile_2_index)
-            .unwrap();
-        find_path_events.send(FindPathEvent {
-            start: *random_road_tile_1,
-            end: *random_road_tile_2,
-        });
-    }
-} */
 
 fn find_path_event_handler(
     mut commands: Commands,
     mut pathfind_query: Query<(Entity, &NeedsPathFinding)>,
-    occupied_road_tiles: Res<OccupiedRoadTiles>,
+    occupied_road_tiles: Res<RoadTilesResource>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
 ) {
     for (entity, pathfind) in pathfind_query.iter_mut() {
-        let start: [usize; 2] = pathfind.start.as_tile_position_2d();
-        let end = pathfind.end.as_tile_position_2d();
+        let start = pathfind.start.position_2d();
+        let end = pathfind.end.position_2d();
         let path: Option<(Path, Distance)> = pathfinding::prelude::dijkstra(
             &start,
             |p| {
                 occupied_road_tiles
-                    .get_neighbours(ChunkTilePosition::from_tile_position_2d(*p))
+                    .get_neighbours(TilePosition::from_position_2d(*p))
                     .into_iter()
-                    .map(|p| (p.as_tile_position_2d(), 1))
+                    .map(|p| (p.position_2d(), 1))
             },
             |p| *p == end,
         );
@@ -83,7 +59,7 @@ fn find_path_event_handler(
             Some((path, _distance)) => {
                 for position in path.iter() {
                     highlight_tile_events.send(HighlightTileEvent {
-                        position: ChunkTilePosition::from_tile_position_2d(*position),
+                        position: TilePosition::from_position_2d(*position),
                         color: Color::GOLD,
                     });
                 }

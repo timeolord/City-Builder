@@ -2,11 +2,8 @@ use bevy::prelude::*;
 use bevy_mod_raycast::prelude::*;
 
 use crate::{
-    chunk::{
-        chunk_tile_position::{ChunkPosition, ChunkTilePosition},
-        Chunk,
-    },
-    world::{heightmap_generator::Heightmap, tile_highlight::HighlightTileEvent, WorldSettings},
+    chunk::{chunk_tile_position::TilePosition, Chunk},
+    world::{heightmap::HeightmapsResource, tile_highlight::HighlightTileEvent, WorldSettings},
     GameState,
 };
 
@@ -18,7 +15,7 @@ pub struct CursorMovedTile(Vec2);
 
 #[derive(Resource, Clone, Copy)]
 pub struct CurrentTile {
-    pub position: ChunkTilePosition,
+    pub position: TilePosition,
 }
 
 pub struct CursorPlugin;
@@ -26,7 +23,7 @@ impl Plugin for CursorPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource({
             CurrentTile {
-                position: ChunkTilePosition::default(),
+                position: TilePosition::default(),
             }
         });
         app.add_plugins(DeferredRaycastingPlugin::<RaycastSet>::default());
@@ -50,37 +47,28 @@ impl Plugin for CursorPlugin {
     }
 } */
 fn tile_cursor(
-    meshes: Query<(&RaycastMesh<RaycastSet>, &Heightmap), With<Chunk>>,
+    meshes: Query<&RaycastMesh<RaycastSet>, With<Chunk>>,
     world_settings: Option<Res<WorldSettings>>,
     mut current_tile: ResMut<CurrentTile>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
     mut gizmos: Gizmos,
-    heightmaps: Query<(&Heightmap, &ChunkPosition)>,
+    heightmaps: Res<HeightmapsResource>,
 ) {
-    for (intersection_mesh, _) in meshes.iter() {
+    for intersection_mesh in meshes.iter() {
         for (_, intersection) in intersection_mesh.intersections.iter() {
             //Sets the current tile resource
             match world_settings {
                 Some(_) => {
                     let intersection_pos = intersection.position();
 
-                    current_tile.position =
-                        ChunkTilePosition::from_world_position(intersection_pos);
+                    current_tile.position = TilePosition::from_world_position(intersection_pos);
 
                     highlight_tile_events.send(HighlightTileEvent {
                         position: current_tile.position,
                         color: Color::BLUE,
                     });
 
-                    let heightmap = heightmaps
-                        .iter()
-                        .find(|(_, chunk_position)| {
-                            **chunk_position == current_tile.position.chunk_position
-                        })
-                        .unwrap()
-                        .0;
-
-                    let pos = heightmap.get_from_world_position(intersection_pos);
+                    let pos = heightmaps.get_from_world_position(intersection_pos);
                     gizmos.sphere(pos, Quat::IDENTITY, 0.5, Color::SALMON);
                 }
                 None => {}

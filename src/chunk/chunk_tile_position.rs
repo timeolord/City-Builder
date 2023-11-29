@@ -1,308 +1,316 @@
-use std::ops::{Index, IndexMut};
+use std::ops::{Add, Neg, Sub};
 
-use bevy::prelude::{Component, Vec3};
+use bevy::{
+    ecs::component::Component,
+    math::{IVec2, IVec3, UVec2, Vec3Swizzles},
+    prelude::Vec3,
+};
+use enum_map::{Enum, EnumMap};
 
-use crate::{constants::{CHUNK_SIZE, TILE_SIZE}, world::heightmap_generator::Heightmap};
+use crate::{
+    constants::{CHUNK_SIZE, TILE_SIZE},
+    math_utils::Mean,
+    world::heightmap::Heightmap,
+};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
-pub type TilePosition3D = [usize; 3];
-pub type TilePosition2D = [usize; 2];
-
-#[derive(Component, Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub type TilePosition2D = IVec2;
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct ChunkPosition {
-    pub position: [usize; 2],
+    pub position: UVec2,
 }
-impl Index<usize> for ChunkPosition {
-    type Output = usize;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.position[index]
+impl ChunkPosition {
+    pub fn from_world_position(world_position: Vec3) -> ChunkPosition {
+        TilePosition::from_world_position(world_position).chunk_position()
     }
 }
-impl IndexMut<usize> for ChunkPosition {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.position[index]
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub type Neighbours<T> = EnumMap<CardinalDirection, T>;
 
-pub struct ChunkTilePosition {
-    pub chunk_position: ChunkPosition,
-    pub tile_position: TilePosition3D,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+
+pub struct TilePosition {
+    pub position: IVec3,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct TileNeighbours {
-    pub north: Option<ChunkTilePosition>,
-    pub south: Option<ChunkTilePosition>,
-    pub east: Option<ChunkTilePosition>,
-    pub west: Option<ChunkTilePosition>,
-    pub north_east: Option<ChunkTilePosition>,
-    pub north_west: Option<ChunkTilePosition>,
-    pub south_east: Option<ChunkTilePosition>,
-    pub south_west: Option<ChunkTilePosition>,
-}
-impl TileNeighbours {
-    pub fn has_all(&self) -> bool {
-        self.north.is_some()
-            && self.south.is_some()
-            && self.east.is_some()
-            && self.west.is_some()
-            && self.north_east.is_some()
-            && self.north_west.is_some()
-            && self.south_east.is_some()
-            && self.south_west.is_some()
+impl TilePosition {
+    pub fn position_2d(&self) -> TilePosition2D {
+        self.position.xz()
     }
-    pub fn to_array(&self) -> [Option<ChunkTilePosition>; 8] {
-        [
-            self.north,
-            self.south,
-            self.east,
-            self.west,
-            self.north_east,
-            self.north_west,
-            self.south_east,
-            self.south_west,
-        ]
-    }
-}
-#[derive(Clone, Copy, Debug)]
-pub struct ChunkNeighbours {
-    pub north: Option<ChunkPosition>,
-    pub south: Option<ChunkPosition>,
-    pub east: Option<ChunkPosition>,
-    pub west: Option<ChunkPosition>,
-    pub north_east: Option<ChunkPosition>,
-    pub north_west: Option<ChunkPosition>,
-    pub south_east: Option<ChunkPosition>,
-    pub south_west: Option<ChunkPosition>,
-}
-impl ChunkNeighbours {
-    pub fn has_all(&self) -> bool {
-        self.north.is_some()
-            && self.south.is_some()
-            && self.east.is_some()
-            && self.west.is_some()
-            && self.north_east.is_some()
-            && self.north_west.is_some()
-            && self.south_east.is_some()
-            && self.south_west.is_some()
-    }
-    pub fn to_array(&self) -> [Option<ChunkPosition>; 8] {
-        [
-            self.north,
-            self.south,
-            self.east,
-            self.west,
-            self.north_east,
-            self.north_west,
-            self.south_east,
-            self.south_west,
-        ]
-    }
-}
-
-impl ChunkTilePosition {
-    pub fn tile_position_2d(&self) -> TilePosition2D {
-        [self.tile_position[0], self.tile_position[2]]
-    }
-    pub fn tile_neighbours(&self) -> TileNeighbours {
-        fn neighbour(
-            tile_pos: TilePosition3D,
-            x_offset: isize,
-            z_offset: isize,
-        ) -> Option<ChunkTilePosition> {
-            let tile_pos = [
-                (tile_pos[0] as isize + x_offset),
-                tile_pos[1] as isize,
-                (tile_pos[2] as isize + z_offset),
-            ];
-            if (tile_pos[0] < 0) || (tile_pos[2] < 0) {
-                None
-            } else {
-                let tile_pos = [
-                    tile_pos[0] as usize,
-                    tile_pos[1] as usize,
-                    tile_pos[2] as usize,
-                ];
-                Some(ChunkTilePosition::from_tile_position(tile_pos))
-            }
-        }
-        let mut tile_position = self.tile_position;
-        tile_position[0] += self.chunk_position[0] * CHUNK_SIZE;
-        tile_position[2] += self.chunk_position[1] * CHUNK_SIZE;
-        TileNeighbours {
-            north: neighbour(tile_position, 0, 1),
-            south: neighbour(tile_position, 0, -1),
-            east: neighbour(tile_position, 1, 0),
-            west: neighbour(tile_position, -1, 0),
-            north_east: neighbour(tile_position, 1, 1),
-            north_west: neighbour(tile_position, -1, 1),
-            south_east: neighbour(tile_position, 1, -1),
-            south_west: neighbour(tile_position, -1, -1),
+    pub fn chunk_position(&self) -> ChunkPosition {
+        ChunkPosition {
+            position: UVec2::new(
+                ((self.position.x as f32 / CHUNK_SIZE as f32).floor()) as u32,
+                ((self.position.z as f32 / CHUNK_SIZE as f32).floor()) as u32,
+            ),
         }
     }
-    pub fn non_diagonal_tile_neighbours(&self) -> TileNeighbours{
-        fn neighbour(
-            tile_pos: TilePosition3D,
-            x_offset: isize,
-            z_offset: isize,
-        ) -> Option<ChunkTilePosition> {
-            let tile_pos = [
-                (tile_pos[0] as isize + x_offset),
-                tile_pos[1] as isize,
-                (tile_pos[2] as isize + z_offset),
-            ];
-            if (tile_pos[0] < 0) || (tile_pos[2] < 0) {
-                None
-            } else {
-                let tile_pos = [
-                    tile_pos[0] as usize,
-                    tile_pos[1] as usize,
-                    tile_pos[2] as usize,
-                ];
-                Some(ChunkTilePosition::from_tile_position(tile_pos))
-            }
+    pub fn tile_neighbours(&self) -> Neighbours<TilePosition> {
+        let mut neighbours = Neighbours::default();
+        for direction in CardinalDirection::iter() {
+            neighbours[direction] = *self + direction;
         }
-        let mut tile_position = self.tile_position;
-        tile_position[0] += self.chunk_position[0] * CHUNK_SIZE;
-        tile_position[2] += self.chunk_position[1] * CHUNK_SIZE;
-        TileNeighbours {
-            north: neighbour(tile_position, 0, 1),
-            south: neighbour(tile_position, 0, -1),
-            east: neighbour(tile_position, 1, 0),
-            west: neighbour(tile_position, -1, 0),
-            north_east: None,
-            north_west: None,
-            south_east: None,
-            south_west: None,
+        neighbours
+    }
+    pub fn non_diagonal_tile_neighbours(&self) -> Neighbours<TilePosition> {
+        let mut neighbours = Neighbours::default();
+        for direction in CardinalDirection::non_compound_directions().into_iter() {
+            neighbours[direction] = *self + direction;
         }
+        neighbours
     }
     pub fn to_world_position(&self) -> Vec3 {
         let mut world_position = Vec3::new(
-            self.chunk_position[0] as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
-            0.0,
-            self.chunk_position[1] as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
+            self.position.x as f32 * TILE_SIZE,
+            self.position.y as f32 * TILE_SIZE,
+            self.position.z as f32 * TILE_SIZE,
         );
-        world_position.x += self.tile_position[0] as f32 * TILE_SIZE;
-        world_position.y += self.tile_position[1] as f32 * TILE_SIZE;
-        world_position.z += self.tile_position[2] as f32 * TILE_SIZE;
         world_position.x -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
-    pub fn to_world_position_with_height(&self, heighmap: &Heightmap) -> Vec3 {
+    pub fn to_world_position_with_height(&self, heightmap: &Heightmap) -> Vec3 {
         let mut world_position = Vec3::new(
-            self.chunk_position[0] as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
-            heighmap[*self][4],
-            self.chunk_position[1] as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
+            self.chunk_position().position.x as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
+            heightmap[*self].into_iter().mean_f32(),
+            self.chunk_position().position.y as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
         );
-        world_position.x += self.tile_position[0] as f32 * TILE_SIZE;
-        world_position.y += self.tile_position[1] as f32 * TILE_SIZE;
-        world_position.z += self.tile_position[2] as f32 * TILE_SIZE;
+        world_position.x += self.position.x as f32 * TILE_SIZE;
+        world_position.y += self.position[1] as f32 * TILE_SIZE;
+        world_position.z += self.position.z as f32 * TILE_SIZE;
         world_position.x -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
-    pub fn chunk_neighbours(&self) -> ChunkNeighbours {
-        fn neighbour(
-            chunk_pos: ChunkPosition,
-            x_offset: isize,
-            z_offset: isize,
-        ) -> Option<ChunkPosition> {
-            let chunk_pos = [
-                (chunk_pos[0] as isize + x_offset),
-                (chunk_pos[1] as isize + z_offset),
-            ];
-            if (chunk_pos[0] < 0) || (chunk_pos[1] < 0) {
-                None
-            } else {
-                let chunk_pos = [chunk_pos[0] as usize, chunk_pos[1] as usize];
-                Some(ChunkPosition {
-                    position: chunk_pos,
-                })
+    pub fn chunk_neighbours(&self) -> Neighbours<ChunkPosition> {
+        let mut neighbours = Neighbours::default();
+        for direction in CardinalDirection::iter() {
+            neighbours[direction] = self.chunk_position() + direction;
+        }
+        neighbours
+    }
+    pub fn from_world_position(world_position: Vec3) -> TilePosition {
+        let mut position = world_position;
+        position.x += ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
+        position.z += ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
+        position.x += TILE_SIZE / 2.0;
+        position.z += TILE_SIZE / 2.0;
+        position.x = position.x.floor();
+        position.y = position.y.floor();
+        position.z = position.z.floor();
+        TilePosition {
+            position: position.as_ivec3(),
+        }
+    }
+    pub fn to_relative_tile_position(&self) -> TilePosition {
+        let mut position = self.position;
+        position.x -= self.chunk_position().position.x as i32 * CHUNK_SIZE as i32;
+        position.z -= self.chunk_position().position.y as i32 * CHUNK_SIZE as i32;
+        TilePosition { position }
+    }
+    //pub fn from_world_position(world_position: Vec3) -> TilePosition {
+    //    let mut position = Self::world_position_to_tile_position(world_position);
+    //    let chunk_position = [
+    //        ((position.x as f32 / CHUNK_SIZE as f32).floor()) as i32,
+    //        ((position.z as f32 / CHUNK_SIZE as f32).floor()) as i32,
+    //    ];
+    //    position.x -= (chunk_position.x) * CHUNK_SIZE as i32;
+    //    position.z -= (chunk_position[1]) * CHUNK_SIZE as i32;
+    //    TilePosition { position }
+    //}
+    pub fn from_position_2d(position: TilePosition2D) -> TilePosition {
+        TilePosition {
+            position: IVec3::new(position.x, 0, position.y),
+        }
+    }
+    //pub fn clamp_to_world(&self, world_size: WorldSize) -> TilePosition {
+    //    let min_values = IVec3::new(0, i32::MIN, 0);
+    //    let max_values = IVec3::new(
+    //        world_size[0] as i32 * CHUNK_SIZE as i32 - 1,
+    //        i32::MAX,
+    //        world_size[1] as i32 * CHUNK_SIZE as i32 - 1,
+    //    );
+    //    TilePosition {
+    //        position: self.position.clamp(min_values, max_values),
+    //    }
+    //}
+}
+impl Add<CardinalDirection> for TilePosition {
+    type Output = TilePosition;
+
+    fn add(self, rhs: CardinalDirection) -> Self::Output {
+        let mut position = self.position;
+        match rhs {
+            CardinalDirection::North => {
+                position.x += 1;
+            }
+            CardinalDirection::NorthEast => {
+                position.x += 1;
+                position.z += 1;
+            }
+            CardinalDirection::East => {
+                position.z += 1;
+            }
+            CardinalDirection::SouthEast => {
+                position.x -= 1;
+                position.z += 1;
+            }
+            CardinalDirection::South => {
+                position.x -= 1;
+            }
+            CardinalDirection::SouthWest => {
+                position.x -= 1;
+                position.z -= 1;
+            }
+            CardinalDirection::West => {
+                position.z -= 1;
+            }
+            CardinalDirection::NorthWest => {
+                position.x += 1;
+                position.z -= 1;
             }
         }
-        ChunkNeighbours {
-            north: neighbour(self.chunk_position, 0, 1),
-            south: neighbour(self.chunk_position, 0, -1),
-            east: neighbour(self.chunk_position, 1, 0),
-            west: neighbour(self.chunk_position, -1, 0),
-            north_east: neighbour(self.chunk_position, 1, 1),
-            north_west: neighbour(self.chunk_position, -1, 1),
-            south_east: neighbour(self.chunk_position, 1, -1),
-            south_west: neighbour(self.chunk_position, -1, -1),
-        }
-    }
-    pub fn world_position_to_tile_position(world_position: Vec3) -> TilePosition3D {
-        let mut tile_position = world_position;
-        tile_position.x += ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
-        tile_position.z += ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
-        tile_position.x += TILE_SIZE / 2.0;
-        tile_position.z += TILE_SIZE / 2.0;
-        tile_position.x = tile_position.x.floor();
-        tile_position.y = tile_position.y.floor();
-        tile_position.z = tile_position.z.floor();
-        [
-            tile_position.x as usize,
-            tile_position.y as usize,
-            tile_position.z as usize,
-        ]
-    }
-    pub fn from_world_position(world_position: Vec3) -> ChunkTilePosition {
-        let mut tile_position = Self::world_position_to_tile_position(world_position);
-        let chunk_position = [
-            ((tile_position[0] as f32 / CHUNK_SIZE as f32).floor()) as usize,
-            ((tile_position[2] as f32 / CHUNK_SIZE as f32).floor()) as usize,
-        ];
-        tile_position[0] -= (chunk_position[0]) * CHUNK_SIZE;
-        tile_position[2] -= (chunk_position[1]) * CHUNK_SIZE;
-        ChunkTilePosition {
-            chunk_position: ChunkPosition {
-                position: [chunk_position[0] as usize, chunk_position[1] as usize],
-            },
-            tile_position,
-        }
-    }
-    pub fn from_tile_position(tile_position: TilePosition3D) -> ChunkTilePosition {
-        let chunk_position = [
-            ((tile_position[0] as f32 / CHUNK_SIZE as f32).floor()) as usize,
-            ((tile_position[2] as f32 / CHUNK_SIZE as f32).floor()) as usize,
-        ];
-        let mut tile_position = tile_position;
-        tile_position[0] -= (chunk_position[0]) * CHUNK_SIZE;
-        tile_position[2] -= (chunk_position[1]) * CHUNK_SIZE;
-        ChunkTilePosition {
-            chunk_position: ChunkPosition {
-                position: chunk_position,
-            },
-            tile_position,
-        }
-    }
-    pub fn from_tile_position_2d(tile_position: TilePosition2D) -> ChunkTilePosition {
-        ChunkTilePosition::from_tile_position([tile_position[0], 0, tile_position[1]])
-    }
-    pub fn as_tile_position(&self) -> TilePosition3D {
-        let mut tile_position = self.tile_position;
-        tile_position[0] += self.chunk_position[0] * CHUNK_SIZE;
-        tile_position[2] += self.chunk_position[1] * CHUNK_SIZE;
-        tile_position
-    }
-    pub fn as_tile_position_2d(&self) -> TilePosition2D {
-        let tile_position = self.as_tile_position();
-        [tile_position[0], tile_position[2]]
-    }
-    pub fn clamp_to_world(&self, world_size: [usize; 2]) -> ChunkTilePosition {
-        let mut tile_position = self.as_tile_position();
-        tile_position[0] = tile_position[0].clamp(0, world_size[0] * CHUNK_SIZE - 1);
-        tile_position[2] = tile_position[2].clamp(0, world_size[1] * CHUNK_SIZE - 1);
-        ChunkTilePosition::from_tile_position(tile_position)
+        TilePosition { position }
     }
 }
-impl Default for ChunkTilePosition {
-    fn default() -> Self {
-        Self {
-            chunk_position: ChunkPosition { position: [0, 0] },
-            tile_position: [0, 0, 0],
+impl Add<CardinalDirection> for ChunkPosition {
+    type Output = ChunkPosition;
+
+    fn add(self, rhs: CardinalDirection) -> Self::Output {
+        let mut position = self.position;
+        match rhs {
+            CardinalDirection::North => {
+                position.x += 1;
+            }
+            CardinalDirection::NorthEast => {
+                position.x += 1;
+                position.y += 1;
+            }
+            CardinalDirection::East => {
+                position.y += 1;
+            }
+            CardinalDirection::SouthEast => {
+                position.x -= 1;
+                position.y += 1;
+            }
+            CardinalDirection::South => {
+                position.x -= 1;
+            }
+            CardinalDirection::SouthWest => {
+                position.x -= 1;
+                position.y -= 1;
+            }
+            CardinalDirection::West => {
+                position.y -= 1;
+            }
+            CardinalDirection::NorthWest => {
+                position.x += 1;
+                position.y -= 1;
+            }
+        }
+        ChunkPosition { position }
+    }
+}
+impl Sub<CardinalDirection> for TilePosition {
+    type Output = TilePosition;
+
+    fn sub(self, rhs: CardinalDirection) -> Self::Output {
+        self + (-rhs)
+    }
+}
+impl Sub<CardinalDirection> for ChunkPosition {
+    type Output = ChunkPosition;
+
+    fn sub(self, rhs: CardinalDirection) -> Self::Output {
+        self + (-rhs)
+    }
+}
+#[derive(Enum, EnumIter, Hash, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CardinalDirection {
+    North = 0,
+    NorthEast = 1,
+    East = 2,
+    SouthEast = 3,
+    South = 4,
+    SouthWest = 5,
+    West = 6,
+    NorthWest = 7,
+}
+impl CardinalDirection {
+    pub fn non_compound_directions() -> Vec<CardinalDirection> {
+        vec![
+            CardinalDirection::North,
+            CardinalDirection::East,
+            CardinalDirection::South,
+            CardinalDirection::West,
+        ]
+    }
+    pub fn split_direction(&self) -> [CardinalDirection; 2] {
+        match self {
+            CardinalDirection::North => {
+                [CardinalDirection::NorthWest, CardinalDirection::NorthEast]
+            }
+            CardinalDirection::NorthEast => [CardinalDirection::North, CardinalDirection::East],
+            CardinalDirection::East => [CardinalDirection::NorthEast, CardinalDirection::SouthEast],
+            CardinalDirection::SouthEast => [CardinalDirection::East, CardinalDirection::South],
+            CardinalDirection::South => {
+                [CardinalDirection::SouthEast, CardinalDirection::SouthWest]
+            }
+            CardinalDirection::SouthWest => [CardinalDirection::South, CardinalDirection::West],
+            CardinalDirection::West => [CardinalDirection::SouthWest, CardinalDirection::NorthWest],
+            CardinalDirection::NorthWest => [CardinalDirection::West, CardinalDirection::North],
+        }
+    }
+    pub fn next_clockwise(&self) -> CardinalDirection {
+        match self {
+            CardinalDirection::North => CardinalDirection::NorthEast,
+            CardinalDirection::NorthEast => CardinalDirection::East,
+            CardinalDirection::East => CardinalDirection::SouthEast,
+            CardinalDirection::SouthEast => CardinalDirection::South,
+            CardinalDirection::South => CardinalDirection::SouthWest,
+            CardinalDirection::SouthWest => CardinalDirection::West,
+            CardinalDirection::West => CardinalDirection::NorthWest,
+            CardinalDirection::NorthWest => CardinalDirection::North,
+        }
+    }
+    pub fn next_counter_clockwise(&self) -> CardinalDirection {
+        match self {
+            CardinalDirection::North => CardinalDirection::NorthWest,
+            CardinalDirection::NorthEast => CardinalDirection::North,
+            CardinalDirection::East => CardinalDirection::NorthEast,
+            CardinalDirection::SouthEast => CardinalDirection::East,
+            CardinalDirection::South => CardinalDirection::SouthEast,
+            CardinalDirection::SouthWest => CardinalDirection::South,
+            CardinalDirection::West => CardinalDirection::SouthWest,
+            CardinalDirection::NorthWest => CardinalDirection::West,
+        }
+    }
+    pub fn to_angle(&self) -> f32 {
+        match self {
+            CardinalDirection::North => 0.0,
+            CardinalDirection::NorthEast => 45.0,
+            CardinalDirection::East => 90.0,
+            CardinalDirection::SouthEast => 135.0,
+            CardinalDirection::South => 180.0,
+            CardinalDirection::SouthWest => -135.0,
+            CardinalDirection::West => -90.0,
+            CardinalDirection::NorthWest => -45.0,
+        }
+    }
+}
+impl Neg for CardinalDirection {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            CardinalDirection::North => CardinalDirection::South,
+            CardinalDirection::NorthEast => CardinalDirection::SouthWest,
+            CardinalDirection::East => CardinalDirection::West,
+            CardinalDirection::SouthEast => CardinalDirection::NorthWest,
+            CardinalDirection::South => CardinalDirection::North,
+            CardinalDirection::SouthWest => CardinalDirection::NorthEast,
+            CardinalDirection::West => CardinalDirection::East,
+            CardinalDirection::NorthWest => CardinalDirection::SouthEast,
         }
     }
 }

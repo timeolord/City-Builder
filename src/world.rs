@@ -1,24 +1,26 @@
 pub mod buildings;
 pub mod game_time;
-pub mod heightmap_generator;
+pub mod heightmap;
+pub mod resources;
 pub mod road;
 pub mod terraform;
 pub mod tile_highlight;
 pub mod tools;
 pub mod vehicles;
-pub mod resources;
 use std::f32::consts::PI;
 
 use crate::{
+    camera::CameraPlugin,
     chunk::{chunk_tile_position::ChunkPosition, Grid, SpawnChunkEvent},
+    cursor::CursorPlugin,
     GameState,
 };
-use bevy::{pbr::CascadeShadowConfigBuilder, prelude::*};
+use bevy::prelude::*;
 
 use self::{
-    buildings::BuildingsPlugin, game_time::GameTimePlugin, road::RoadPlugin,
-    terraform::TerraformPlugin, tile_highlight::TileHighlightPlugin, tools::ToolsPlugin,
-    vehicles::VehiclesPlugin, resources::ResourcesPlugin,
+    buildings::BuildingsPlugin, game_time::GameTimePlugin, heightmap::HeightmapsResource,
+    resources::ResourcesPlugin, road::RoadPlugin, terraform::TerraformPlugin,
+    tile_highlight::TileHighlightPlugin, tools::ToolsPlugin, vehicles::VehiclesPlugin,
 };
 
 pub struct WorldPlugin;
@@ -26,6 +28,8 @@ pub struct WorldPlugin;
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            CameraPlugin,
+            CursorPlugin,
             TerraformPlugin,
             RoadPlugin,
             ToolsPlugin,
@@ -51,9 +55,11 @@ fn exit(mut commands: Commands, query: Query<Entity, With<WorldEntity>>) {
 #[derive(Component)]
 struct WorldEntity;
 
+pub type WorldSize = [u32; 2];
+
 #[derive(Resource)]
 pub struct WorldSettings {
-    pub world_size: [usize; 2],
+    pub world_size: WorldSize,
     pub seed: u32,
     pub grid_visibility: Visibility,
 }
@@ -66,6 +72,7 @@ fn init(mut commands: Commands) {
         seed,
         grid_visibility: Visibility::Visible,
     });
+    commands.insert_resource(HeightmapsResource::new(world_size))
 }
 
 fn setup(
@@ -86,12 +93,12 @@ fn setup(
             rotation: Quat::from_rotation_x(-PI / 4.),
             ..default()
         },
-        cascade_shadow_config: CascadeShadowConfigBuilder {
-            first_cascade_far_bound: 4.0,
-            maximum_distance: 1000.0,
-            ..default()
-        }
-        .into(),
+        //cascade_shadow_config: CascadeShadowConfigBuilder {
+        //    first_cascade_far_bound: 4.0,
+        //    maximum_distance: 1000.0,
+        //    ..default()
+        //}
+        //.into(),
         ..default()
     });
     commands.insert_resource(AmbientLight {
@@ -103,50 +110,11 @@ fn setup(
     for x in 0..world_size[0] {
         for y in 0..world_size[1] {
             spawn_chunk_event.send(SpawnChunkEvent {
-                position: ChunkPosition { position: [x, y] },
-                heightmap: Some(heightmap_generator::generate_heightmap(
-                    world_settings.seed,
-                    ChunkPosition { position: [x, y] },
-                )),
+                position: ChunkPosition {
+                    position: UVec2::new(x, y),
+                },
             });
         }
-    }
-}
-
-trait AsF32<T, const N: usize> {
-    fn as_f32(&self) -> [f32; N];
-}
-impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> AsF32<T, N> for [T; N] {
-    fn as_f32(&self) -> [f32; N] {
-        let mut array = [0.0; N];
-        for (i, item) in self.iter().enumerate() {
-            array[i] = (*item).as_();
-        }
-        array
-    }
-}
-trait AsU32<T, const N: usize> {
-    fn as_u32(&self) -> [u32; N];
-}
-impl<T: num_traits::cast::AsPrimitive<u32>, const N: usize> AsU32<T, N> for [T; N] {
-    fn as_u32(&self) -> [u32; N] {
-        let mut array = [0; N];
-        for (i, item) in self.iter().enumerate() {
-            array[i] = (*item).as_();
-        }
-        array
-    }
-}
-trait AsI32<T, const N: usize> {
-    fn as_i32(&self) -> [i32; N];
-}
-impl<T: num_traits::cast::AsPrimitive<i32>, const N: usize> AsI32<T, N> for [T; N] {
-    fn as_i32(&self) -> [i32; N] {
-        let mut array = [0; N];
-        for (i, item) in self.iter().enumerate() {
-            array[i] = (*item).as_();
-        }
-        array
     }
 }
 

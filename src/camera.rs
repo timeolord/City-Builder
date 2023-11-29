@@ -12,8 +12,8 @@ use smooth_bevy_cameras::{
 
 use crate::{
     constants::DEBUG,
-    world::{heightmap_generator::Heightmap, WorldSettings},
-    GameState, chunk::chunk_tile_position::{ChunkPosition, ChunkTilePosition},
+    world::heightmap::HeightmapsResource,
+    GameState,
 };
 
 use super::cursor::RaycastSet;
@@ -46,8 +46,7 @@ pub fn input(
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
     mut gizmos: Gizmos,
-    world_settings: Option<Res<WorldSettings>>,
-    heightmaps: Query<(&ChunkPosition, &Heightmap)>,
+    heightmaps: Res<HeightmapsResource>,
 ) {
     //Modified from smooth_bevy_cameras
     // Can only control one camera at a time.
@@ -78,26 +77,8 @@ pub fn input(
     }
 
     //World Camera
-    match world_settings {
-        Some(_) => {
-            //todo add lerping or use a raycast
-            let chunk_tile_position = ChunkTilePosition::from_world_position(transform.target);
-            match heightmaps
-                .iter()
-                .find(|(chunk, _)| **chunk == chunk_tile_position.chunk_position)
-            {
-                Some((_, heightmap)) => {
-                    let height = heightmap[chunk_tile_position.tile_position_2d()]
-                        .into_iter()
-                        .reduce(f32::max)
-                        .unwrap();
-                    transform.target.y = height + 0.1;
-                }
-                None => {}
-            }
-        }
-        None => {}
-    }
+    let height = heightmaps.get_from_world_position(transform.target).y;
+    transform.target.y = height + 0.1;
 
     if mouse_buttons.pressed(MouseButton::Middle) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));

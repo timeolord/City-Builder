@@ -1,10 +1,11 @@
 //! A simple 3D scene with light shining over a cube sitting on a plane.
-mod asset_builder;
-pub mod camera;
+mod camera;
 mod chunk;
 mod constants;
-pub mod cursor;
+mod cursor;
+mod math_utils;
 mod menu;
+mod mesh_generator;
 mod world;
 use bevy::prelude::*;
 use constants::DEFAULT_TIMESTEP;
@@ -20,7 +21,6 @@ enum GameState {
 fn main() {
     let plugins = (
         DefaultPlugins,
-        asset_builder::AssetBuilderPlugin,
         menu::MenuPlugin,
         world::WorldPlugin,
         chunk::ChunkPlugin,
