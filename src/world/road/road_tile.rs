@@ -4,14 +4,12 @@ use crate::chunk::chunk_tile_position::{CardinalDirection, TilePosition};
 pub struct RoadTile {
     pub position: TilePosition,
     pub direction: CardinalDirection,
-    pub diagonal: Option<CardinalDirection>,
 }
 impl Default for RoadTile {
     fn default() -> Self {
         Self {
             position: TilePosition::default(),
             direction: CardinalDirection::North,
-            diagonal: None,
         }
     }
 }

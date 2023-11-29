@@ -1,7 +1,7 @@
 use array2d::Array2D;
 use bevy::{
     ecs::system::Resource,
-    math::{UVec2, Vec3, Vec3Swizzles},
+    math::{UVec2, Vec3, Vec3Swizzles, Vec2},
 };
 use noise::{NoiseFn, Perlin};
 use std::ops::{Index, IndexMut};
@@ -22,7 +22,7 @@ pub struct HeightmapsResource {
     pub heightmaps: Array2D<Heightmap>,
 }
 impl HeightmapsResource {
-    pub fn new(world_size: WorldSize) -> Self {
+    pub fn new(world_size: WorldSize, seed: u32) -> Self {
         let mut heightmaps = Array2D::filled_with(
             Heightmap::new(),
             world_size[0] as usize,
@@ -31,7 +31,7 @@ impl HeightmapsResource {
         for x in 0..world_size[0] {
             for y in 0..world_size[1] {
                 heightmaps[(x as usize, y as usize)] = generate_heightmap(
-                    0,
+                    seed,
                     ChunkPosition {
                         position: UVec2::new(x as u32, y as u32),
                     },
@@ -41,6 +41,11 @@ impl HeightmapsResource {
         Self { heightmaps }
     }
     pub fn get_from_world_position(&self, position: Vec3) -> Vec3 {
+        self[TilePosition::from_world_position(position).chunk_position()]
+            .get_from_world_position(position)
+    }
+    pub fn get_from_world_position_2d(&self, position: Vec2) -> Vec3 {
+        let position = Vec3::new(position.x, 0.0, position.y);
         self[TilePosition::from_world_position(position).chunk_position()]
             .get_from_world_position(position)
     }

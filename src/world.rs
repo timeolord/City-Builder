@@ -66,13 +66,13 @@ pub struct WorldSettings {
 
 fn init(mut commands: Commands) {
     let world_size = [4, 4];
-    let seed = 0;
+    let seed: u32 = 0;
     commands.insert_resource(WorldSettings {
         world_size,
         seed,
         grid_visibility: Visibility::Visible,
     });
-    commands.insert_resource(HeightmapsResource::new(world_size))
+    commands.insert_resource(HeightmapsResource::new(world_size, seed));
 }
 
 fn setup(

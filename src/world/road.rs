@@ -4,7 +4,7 @@ pub mod road_tile;
 use itertools::Itertools;
 use std::{collections::HashMap, f32::consts::PI};
 
-use bevy::prelude::*;
+use bevy::{math::cubic_splines::CubicCurve, prelude::*};
 use line_drawing::Bresenham;
 
 use crate::{
@@ -99,13 +99,32 @@ impl Default for RoadIntersections {
     }
 }
 
-#[derive(Component, Clone, Debug, PartialEq, Eq)]
+#[derive(Component, Clone, Debug)]
 pub struct Road {
     pub starting_position: TilePosition,
     pub ending_position: TilePosition,
     pub width: usize,
+    bezier_curve: CubicCurve<Vec2>,
 }
 impl Road {
+    pub fn new(
+        starting_position: TilePosition,
+        ending_position: TilePosition,
+        width: usize,
+    ) -> Self {
+        Self {
+            starting_position,
+            ending_position,
+            width,
+            bezier_curve: CubicBezier::new([[
+                starting_position.to_world_position_2d(),
+                starting_position.to_world_position_2d(),
+                ending_position.to_world_position_2d(),
+                ending_position.to_world_position_2d(),
+            ]])
+            .to_curve(),
+        }
+    }
     fn road_direction(&self) -> CardinalDirection {
         let starting_vec = self.starting_position.position_2d();
         let current_vec = self.starting_position.position_2d();
@@ -151,18 +170,28 @@ fn highlight_road_segments(
     mut gizmos: Gizmos,
     //heightmaps: Query<&Heightmap, &ChunkPosition>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
+    heightmaps: Res<HeightmapsResource>,
 ) {
     for road in roads.iter() {
         //highlight_tile_events.send(HighlightTileEvent {
         //    position: road.clone(),
         //    color: Color::VIOLET,
         //});
-
-        gizmos.line(
-            road.starting_position.to_world_position(),
-            road.ending_position.to_world_position(),
-            Color::VIOLET,
-        );
+        let cubic_curve = road
+            .bezier_curve
+            .iter_positions(50)
+            .map(|p| {
+                let mut position = heightmaps.get_from_world_position_2d(p);
+                position.y += 0.1;
+                position
+            })
+            .collect_vec();
+        gizmos.linestrip(cubic_curve, Color::VIOLET);
+        //gizmos.line(
+        //    road.starting_position.to_world_position(),
+        //    road.ending_position.to_world_position(),
+        //    Color::VIOLET,
+        //);
     }
 }
 
@@ -207,12 +236,12 @@ fn road_tool(
             //Highlight current road path
             let snapped_position =
                 snap_to_straight_line(current_tool.starting_point.unwrap(), current_tile.position);
-                    //.clamp_to_world(world_settings.world_size);
-            let road = Road {
-                starting_position: current_tool.starting_point.unwrap(),
-                ending_position: snapped_position,
+            //.clamp_to_world(world_settings.world_size);
+            let road = Road::new(
+                current_tool.starting_point.unwrap(),
+                snapped_position,
                 width,
-            };
+            );
             let road_tiles = calculate_road_tiles(&road);
             for (road_position, _) in road_tiles {
                 //Occupied tiles are red, unoccupied are green
@@ -242,11 +271,7 @@ fn road_tool(
                 //    ending_position: ending_point_y0,
                 //    width,
                 //}));
-                commands.spawn(Road {
-                    starting_position: starting_point_y0,
-                    ending_position: ending_point_y0,
-                    width,
-                });
+                commands.spawn(Road::new(starting_point_y0, ending_point_y0, width));
                 current_tool.starting_point = None;
                 current_tool.ending_point = None;
             }
@@ -322,33 +347,15 @@ fn create_road_entity(
                     //heights[4] = (heights[1] + heights[3]) / 2.0;
                 }
             }
-            match road_tile.diagonal {
-                Some(diagonal) => {
-                    edit_tile_events.send(EditTileEvent {
-                        tile_position: *tile_position,
-                        new_vertices: heights,
-                    });
+            edit_tile_events.send(EditTileEvent {
+                tile_position: *tile_position,
+                new_vertices: heights,
+            });
+            let mesh = create_box_mesh(heights, 0.1);
+            let transform = Transform::from_translation(tile_position.to_world_position());
 
-                    let mesh = create_box_mesh(heights, 0.1);
-                    let transform = Transform::from_translation(tile_position.to_world_position());
-                    //transform.rotate_local_y(diagonal.to_angle().to_radians());
-                    //transform.rotate_local_y((45f32).to_radians());
-
-                    meshes.push(mesh);
-                    transforms.push(transform);
-                }
-                None => {
-                    edit_tile_events.send(EditTileEvent {
-                        tile_position: *tile_position,
-                        new_vertices: heights,
-                    });
-                    let mesh = create_box_mesh(heights, 0.1);
-                    let transform = Transform::from_translation(tile_position.to_world_position());
-
-                    meshes.push(mesh);
-                    transforms.push(transform);
-                }
-            }
+            meshes.push(mesh);
+            transforms.push(transform);
         }
         let mesh = combine_meshes(
             meshes.as_slice(),
@@ -394,7 +401,6 @@ fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
                 RoadTile {
                     position,
                     direction: road_direction,
-                    diagonal: None,
                 },
             )
         })
@@ -423,7 +429,6 @@ fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
                             RoadTile {
                                 position,
                                 direction: road_direction,
-                                diagonal: None,
                             },
                         )
                     });

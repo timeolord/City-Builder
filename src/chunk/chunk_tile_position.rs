@@ -2,7 +2,7 @@ use std::ops::{Add, Neg, Sub};
 
 use bevy::{
     ecs::component::Component,
-    math::{IVec2, IVec3, UVec2, Vec3Swizzles},
+    math::{IVec2, IVec3, UVec2, Vec3Swizzles, Vec2},
     prelude::Vec3,
 };
 use enum_map::{Enum, EnumMap};
@@ -67,6 +67,15 @@ impl TilePosition {
         );
         world_position.x -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
+        world_position
+    }
+    pub fn to_world_position_2d(&self) -> Vec2 {
+        let mut world_position = Vec2::new(
+            self.position.x as f32 * TILE_SIZE,
+            self.position.z as f32 * TILE_SIZE,
+        );
+        world_position.x -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
+        world_position.y -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
     pub fn to_world_position_with_height(&self, heightmap: &Heightmap) -> Vec3 {
