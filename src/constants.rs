@@ -4,5 +4,3 @@ pub const CHUNK_SIZE: u32 = 32;
 pub const GRID_THICKNESS: f32 = 0.005;
 pub const DEFAULT_TIMESTEP: f64 = 0.1;
 pub const HEIGHT_STEP: f32 = 0.1;
-pub const F32_TOLERANCE: f32 = 0.0001;
-pub const F64_TOLERANCE: f32 = 0.0001;

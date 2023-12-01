@@ -9,7 +9,7 @@ use std::ops::{Index, IndexMut};
 use crate::{
     chunk::chunk_tile_position::{ChunkPosition, TilePosition, TilePosition2D},
     constants::{CHUNK_SIZE, HEIGHT_STEP, TILE_SIZE},
-    math_utils::{round_to, unnormalized_normal_vector, unnormalized_normal_array},
+    math_utils::{round_to, unnormalized_normal_array},
 };
 
 use super::WorldSize;

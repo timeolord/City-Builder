@@ -10,7 +10,7 @@ use line_drawing::Bresenham;
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, TilePosition},
-    constants::{F32_TOLERANCE, TILE_SIZE},
+    constants::TILE_SIZE,
     cursor::CurrentTile,
     mesh_generator::{combine_meshes, create_box_mesh, create_road_mesh},
     GameState,
