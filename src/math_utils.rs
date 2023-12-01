@@ -1,12 +1,10 @@
+use std::{borrow::Borrow, ops::Add};
 
-
-use std::{
-    borrow::Borrow,
-    ops::Add,
-};
-
-use bevy::math::Vec3;
+use bevy::math::{cubic_splines::CubicCurve, Vec2, Vec3};
+use itertools::Itertools;
 use num_traits::AsPrimitive;
+
+use crate::world::{heightmap::HeightmapsResource, road::Road};
 
 pub fn unnormalized_normal_vector(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
     (Vec3::from_array(b) - Vec3::from_array(a)).cross(Vec3::from_array(c) - Vec3::from_array(a))
@@ -59,7 +57,7 @@ pub trait Mean: Iterator {
 }
 impl<T: ?Sized> Mean for T where T: Iterator {}
 
-trait AsF32<T, const N: usize> {
+pub trait AsF32<T, const N: usize> {
     fn as_f32(&self) -> [f32; N];
 }
 impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> AsF32<T, N> for [T; N] {
@@ -71,7 +69,7 @@ impl<T: num_traits::cast::AsPrimitive<f32>, const N: usize> AsF32<T, N> for [T; 
         array
     }
 }
-trait AsU32<T, const N: usize> {
+pub trait AsU32<T, const N: usize> {
     fn as_u32(&self) -> [u32; N];
 }
 impl<T: num_traits::cast::AsPrimitive<u32>, const N: usize> AsU32<T, N> for [T; N] {
@@ -83,7 +81,7 @@ impl<T: num_traits::cast::AsPrimitive<u32>, const N: usize> AsU32<T, N> for [T; 
         array
     }
 }
-trait AsI32<T, const N: usize> {
+pub trait AsI32<T, const N: usize> {
     fn as_i32(&self) -> [i32; N];
 }
 impl<T: num_traits::cast::AsPrimitive<i32>, const N: usize> AsI32<T, N> for [T; N] {

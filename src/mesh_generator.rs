@@ -11,7 +11,7 @@ use crate::{
     chunk::chunk_tile_position::TilePosition2D,
     constants::{CHUNK_SIZE, GRID_THICKNESS, TILE_SIZE},
     math_utils::unnormalized_normal_vector,
-    world::heightmap::{Heightmap, HeightmapVertex},
+    world::{heightmap::{Heightmap, HeightmapVertex, HeightmapsResource}, road::Road},
 };
 
 pub fn create_plane_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
@@ -348,6 +348,12 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
     grid_mesh.set_indices(Some(Indices::U32(indices)));
 
     grid_mesh
+}
+
+pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
+    let height_offset = 0.01;
+    let main_spline = road.as_world_positions(heightmaps, height_offset, 0.0);
+    todo!()
 }
 
 pub fn combine_meshes(

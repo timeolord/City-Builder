@@ -3,14 +3,16 @@ pub mod road_tile;
 
 use itertools::Itertools;
 use std::{collections::HashMap, f32::consts::PI};
+use strict_num::ApproxEq;
 
 use bevy::{math::cubic_splines::CubicCurve, prelude::*};
 use line_drawing::Bresenham;
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, TilePosition},
+    constants::{F32_TOLERANCE, TILE_SIZE},
     cursor::CurrentTile,
-    mesh_generator::{combine_meshes, create_box_mesh},
+    mesh_generator::{combine_meshes, create_box_mesh, create_road_mesh},
     GameState,
 };
 
@@ -103,15 +105,11 @@ impl Default for RoadIntersections {
 pub struct Road {
     pub starting_position: TilePosition,
     pub ending_position: TilePosition,
-    pub width: usize,
+    pub width: f32,
     bezier_curve: CubicCurve<Vec2>,
 }
 impl Road {
-    pub fn new(
-        starting_position: TilePosition,
-        ending_position: TilePosition,
-        width: usize,
-    ) -> Self {
+    pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: f32) -> Self {
         Self {
             starting_position,
             ending_position,
@@ -125,7 +123,7 @@ impl Road {
             .to_curve(),
         }
     }
-    fn road_direction(&self) -> CardinalDirection {
+    pub fn road_direction(&self) -> CardinalDirection {
         let starting_vec = self.starting_position.position_2d();
         let current_vec = self.starting_position.position_2d();
         let relative_vec = current_vec - starting_vec;
@@ -144,6 +142,41 @@ impl Road {
                 panic!("Unexpected angle: {}", angle);
             }
         }
+    }
+    pub fn road_length(&self) -> f32 {
+        self.bezier_curve
+            .iter_positions(100)
+            .tuple_windows()
+            .map(|(a, b)| a.distance(b))
+            .sum()
+    }
+    pub fn as_world_positions(
+        &self,
+        heightmaps: &HeightmapsResource,
+        height_offset: f32,
+        horizontal_offset: f32,
+    ) -> Vec<Vec3> {
+        let road_length = self.road_length().round() as usize;
+        let subdivisions = road_length * TILE_SIZE as usize;
+
+        let normal_vectors = self.bezier_curve.iter_velocities(subdivisions).map(|v| {
+            //Rotate velocity vector 90 degrees
+            let rotated = Vec2::new(v.y, -v.x);
+            //Normalize vector
+            let normalized = rotated.normalize();
+            //Scale vector
+            normalized * horizontal_offset
+        });
+
+        self.bezier_curve
+            .iter_positions(subdivisions)
+            .zip(normal_vectors)
+            .map(|(p, normal)| {
+                let mut position = heightmaps.get_from_world_position_2d(p + normal);
+                position.y += height_offset;
+                position
+            })
+            .collect_vec()
     }
 }
 
@@ -177,15 +210,12 @@ fn highlight_road_segments(
         //    position: road.clone(),
         //    color: Color::VIOLET,
         //});
-        let cubic_curve = road
-            .bezier_curve
-            .iter_positions(50)
-            .map(|p| {
-                let mut position = heightmaps.get_from_world_position_2d(p);
-                position.y += 0.1;
-                position
-            })
-            .collect_vec();
+        let road_width = road.width / 2.0;
+        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, 0.0);
+        gizmos.linestrip(cubic_curve, Color::VIOLET);
+        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, -road_width);
+        gizmos.linestrip(cubic_curve, Color::VIOLET);
+        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, road_width);
         gizmos.linestrip(cubic_curve, Color::VIOLET);
         //gizmos.line(
         //    road.starting_position.to_world_position(),
@@ -198,17 +228,16 @@ fn highlight_road_segments(
 fn road_tool(
     mut commands: Commands,
     current_tile: Res<CurrentTile>,
-    //mut spawn_road_events: EventWriter<SpawnRoadEvent>,
+    mut spawn_road_events: EventWriter<SpawnRoadEvent>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
     mut current_tool: ResMut<CurrentTool>,
     mouse_button: Res<Input<MouseButton>>,
     occupied_road_tiles: Res<RoadTilesResource>,
-    world_settings: Res<crate::world::WorldSettings>,
 ) {
     match current_tool.tool_type {
         ToolType::BuildRoad => {
-            let width = current_tool.tool_strength.round() as usize;
-            if width == 0 {
+            let width = current_tool.tool_strength.round();
+            if width < 0.0 {
                 return;
             }
 
@@ -266,12 +295,9 @@ fn road_tool(
                 starting_point_y0.position.y = 0;
                 let mut ending_point_y0 = snapped_position;
                 ending_point_y0.position.y = 0;
-                //spawn_road_events.send(SpawnRoadEvent::new(Road {
-                //    starting_position: starting_point_y0,
-                //    ending_position: ending_point_y0,
-                //    width,
-                //}));
-                commands.spawn(Road::new(starting_point_y0, ending_point_y0, width));
+                let road = Road::new(starting_point_y0, ending_point_y0, width);
+                spawn_road_events.send(SpawnRoadEvent::new(road.clone()));
+                commands.spawn(road);
                 current_tool.starting_point = None;
                 current_tool.ending_point = None;
             }
@@ -281,6 +307,9 @@ fn road_tool(
 }
 
 fn spawn_road_event_handler(
+    mut commands: Commands,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
+    heightmaps: Res<HeightmapsResource>,
     mut spawn_road_events: EventReader<SpawnRoadEvent>,
     mut occupied_road_tiles: ResMut<RoadTilesResource>,
     mut road_intersections: ResMut<RoadIntersections>,
@@ -289,6 +318,7 @@ fn spawn_road_event_handler(
         let road = &spawn_road_event.road;
         let road_tiles = calculate_road_tiles(road);
         for (road_position, road_tile) in road_tiles.iter() {
+            //Adds the road to the occupied tiles
             match occupied_road_tiles.tiles.insert(*road_position, *road_tile) {
                 Some(_) => {
                     road_intersections
@@ -299,6 +329,15 @@ fn spawn_road_event_handler(
                 }
                 None => {}
             }
+            //Create Road Mesh
+            //let mesh = mesh_assets.add(create_road_mesh(road, &heightmaps));
+
+            //Spawns road bundle
+            //TODO add road material
+            //commands.spawn(RoadBundle {
+            //    road: road.clone(),
+            //    pbr: PbrBundle { mesh, ..default() },
+            //});
         }
     }
 }
@@ -390,7 +429,7 @@ fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
     let starting_position = road.starting_position.position_2d();
     let ending_position = road.ending_position.position_2d();
     let road_direction = road.road_direction();
-    let mut tiles = Bresenham::new(starting_position.into(), ending_position.into())
+    let tiles = Bresenham::new(starting_position.into(), ending_position.into())
         .into_iter()
         .map(|(x, y)| {
             let position = TilePosition {
@@ -404,8 +443,7 @@ fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
                 },
             )
         })
-        .collect_vec();
-    //.unique() Check if I actually need this
+        .into_iter();
 
     let diagonal_tiles = match road_direction {
         CardinalDirection::NorthEast
@@ -438,8 +476,8 @@ fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
         }
         _ => Vec::new(),
     };
-    tiles.extend(diagonal_tiles);
-    tiles
+    let tiles = tiles.chain(diagonal_tiles);
+    tiles.unique().collect_vec()
 }
 
 fn snap_to_straight_line(
