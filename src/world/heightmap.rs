@@ -9,7 +9,7 @@ use std::ops::{Index, IndexMut};
 use crate::{
     chunk::chunk_tile_position::{ChunkPosition, TilePosition, TilePosition2D},
     constants::{CHUNK_SIZE, HEIGHT_STEP, TILE_SIZE},
-    math_utils::{round_to, unnormalized_normal_vector},
+    math_utils::{round_to, unnormalized_normal_vector, unnormalized_normal_array},
 };
 
 use super::WorldSize;
@@ -110,7 +110,7 @@ fn interpolate_height(
     normalized_world_position: bevy::prelude::Vec2,
     position: Vec3,
 ) -> Vec3 {
-    let normal_vector = unnormalized_normal_vector(vert_0, vert_1, vert_2);
+    let normal_vector = unnormalized_normal_array(vert_0, vert_1, vert_2);
     let d = normal_vector.dot(vert_0.into());
     let height = (-normal_vector.x * normalized_world_position.x
         - normal_vector.z * normalized_world_position.y

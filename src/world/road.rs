@@ -116,8 +116,12 @@ impl Road {
             width,
             bezier_curve: CubicBezier::new([[
                 starting_position.to_world_position_2d(),
-                starting_position.to_world_position_2d(),
-                ending_position.to_world_position_2d(),
+                starting_position
+                    .to_world_position_2d()
+                    .lerp(ending_position.to_world_position_2d(), 1.0 / 3.0),
+                starting_position
+                    .to_world_position_2d()
+                    .lerp(ending_position.to_world_position_2d(), 2.0 / 3.0),
                 ending_position.to_world_position_2d(),
             ]])
             .to_curve(),
@@ -163,7 +167,7 @@ impl Road {
             //Rotate velocity vector 90 degrees
             let rotated = Vec2::new(v.y, -v.x);
             //Normalize vector
-            let normalized = rotated.normalize();
+            let normalized = rotated.normalize_or_zero();
             //Scale vector
             normalized * horizontal_offset
         });

@@ -6,12 +6,16 @@ use bevy::{
     },
     transform::components::Transform,
 };
+use itertools::Itertools;
 
 use crate::{
     chunk::chunk_tile_position::TilePosition2D,
     constants::{CHUNK_SIZE, GRID_THICKNESS, TILE_SIZE},
-    math_utils::unnormalized_normal_vector,
-    world::{heightmap::{Heightmap, HeightmapVertex, HeightmapsResource}, road::Road},
+    math_utils::{unnormalized_normal_array, normal_vector},
+    world::{
+        heightmap::{Heightmap, HeightmapVertex, HeightmapsResource},
+        road::Road,
+    },
 };
 
 pub fn create_plane_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
@@ -34,16 +38,16 @@ pub fn create_plane_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
         uv_0, uv_1, uv_4, uv_1, uv_2, uv_4, uv_2, uv_3, uv_4, uv_3, uv_0, uv_4,
     ];
     let indices = vec![2, 1, 0, 3, 5, 4, 6, 8, 7, 10, 9, 11];
-    let normal_a = unnormalized_normal_vector(vert_0, vert_4, vert_1)
+    let normal_a = unnormalized_normal_array(vert_0, vert_4, vert_1)
         .normalize()
         .to_array();
-    let normal_b = unnormalized_normal_vector(vert_1, vert_4, vert_2)
+    let normal_b = unnormalized_normal_array(vert_1, vert_4, vert_2)
         .normalize()
         .to_array();
-    let normal_c = unnormalized_normal_vector(vert_4, vert_3, vert_2)
+    let normal_c = unnormalized_normal_array(vert_4, vert_3, vert_2)
         .normalize()
         .to_array();
-    let normal_d = unnormalized_normal_vector(vert_0, vert_3, vert_4)
+    let normal_d = unnormalized_normal_array(vert_0, vert_3, vert_4)
         .normalize()
         .to_array();
 
@@ -108,16 +112,16 @@ pub fn create_box_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
         //2, 1, 0, 3, 5, 4, 6, 8, 7, 10, 9, 11, //Top Face
         7, 6, 5, 8, 10, 9, 11, 13, 12, 15, 14, 16, //Top Face
     ];
-    let normal_a = unnormalized_normal_vector(vert_0, vert_4, vert_1)
+    let normal_a = unnormalized_normal_array(vert_0, vert_4, vert_1)
         .normalize()
         .to_array();
-    let normal_b = unnormalized_normal_vector(vert_1, vert_4, vert_2)
+    let normal_b = unnormalized_normal_array(vert_1, vert_4, vert_2)
         .normalize()
         .to_array();
-    let normal_c = unnormalized_normal_vector(vert_4, vert_3, vert_2)
+    let normal_c = unnormalized_normal_array(vert_4, vert_3, vert_2)
         .normalize()
         .to_array();
-    let normal_d = unnormalized_normal_vector(vert_0, vert_3, vert_4)
+    let normal_d = unnormalized_normal_array(vert_0, vert_3, vert_4)
         .normalize()
         .to_array();
 
@@ -195,7 +199,7 @@ pub fn create_chunk_mesh(heightmap: &Heightmap) -> Mesh {
             indices_count + 3,
             indices_count + 2,
         ];
-        let normal_a = unnormalized_normal_vector(vert_0, vert_3, vert_1)
+        let normal_a = unnormalized_normal_array(vert_0, vert_3, vert_1)
             .normalize()
             .to_array();
         let normals = vec![normal_a, normal_a, normal_a, normal_a];
@@ -330,8 +334,10 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
     let mut indices = Vec::new();
     for x in 0..CHUNK_SIZE as i32 {
         for y in 0..CHUNK_SIZE as i32 {
-            let (new_vertices, uv, index) =
-                create_attributes(IVec2::new(x * TILE_SIZE as i32, y * TILE_SIZE as i32), heightmap);
+            let (new_vertices, uv, index) = create_attributes(
+                IVec2::new(x * TILE_SIZE as i32, y * TILE_SIZE as i32),
+                heightmap,
+            );
             vertices.extend(new_vertices);
             uvs.extend(uv);
             indices.extend(index);
@@ -352,7 +358,36 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
 
 pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     let height_offset = 0.01;
-    let main_spline = road.as_world_positions(heightmaps, height_offset, 0.0);
+
+    let road_width = road.width / 2.0;
+    let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
+    let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
+
+    let length = left_spline.len();
+
+    let vertices = left_spline
+        .into_iter()
+        .tuple_windows::<(_, _)>()
+        .zip_eq(right_spline.into_iter().tuple_windows::<(_, _)>())
+        .map(|((a, b), (c, d))| [a, b, c, d])
+        .collect_vec();
+
+    let uvs: Vec<[f32; 2]> = vertices
+        .iter()
+        .map(|[_, _, _, _]| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+        .flatten()
+        .collect_vec();
+
+    let normals = vertices
+        .iter()
+        .map(|[a, b, c, d]| {
+            let normal = normal_vector(*a, *b, *c)
+                .to_array();
+            [normal, normal, normal, normal]
+        })
+        .flatten()
+        .collect_vec();
+
     todo!()
 }
 

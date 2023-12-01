@@ -6,8 +6,26 @@ use num_traits::AsPrimitive;
 
 use crate::world::{heightmap::HeightmapsResource, road::Road};
 
-pub fn unnormalized_normal_vector(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
-    (Vec3::from_array(b) - Vec3::from_array(a)).cross(Vec3::from_array(c) - Vec3::from_array(a))
+pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
+    let normal = (Vec3::from_array(b) - Vec3::from_array(a)).cross(Vec3::from_array(c) - Vec3::from_array(a));
+    if normal.length().is_sign_negative() {
+        -normal
+    } else {
+        normal
+    }
+}
+
+pub fn unnormalized_normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    let normal = (b - a).cross(c - a);
+    if normal.length().is_sign_negative() {
+        -normal
+    } else {
+        normal
+    }
+}
+
+pub fn normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    unnormalized_normal_vector(a, b, c).normalize()
 }
 
 pub fn average_vectors<const N: usize>(list: [Vec3; N]) -> Vec3 {
