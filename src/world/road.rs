@@ -12,6 +12,7 @@ use crate::{
     chunk::chunk_tile_position::{CardinalDirection, TilePosition},
     constants::TILE_SIZE,
     cursor::CurrentTile,
+    math_utils::{straight_bezier_curve, Arclength, RoundBy},
     mesh_generator::{combine_meshes, create_box_mesh, create_road_mesh},
     GameState,
 };
@@ -66,7 +67,7 @@ pub struct RoadTilesResource {
     pub tiles: HashMap<TilePosition, RoadTile>,
 }
 impl RoadTilesResource {
-    pub fn get_neighbours(&self, tile: TilePosition) -> Vec<TilePosition> {
+    pub fn get_neighbours(&self, tile: TilePosition) -> impl Iterator<Item = TilePosition> {
         let mut new_neighbours = Vec::new();
         let neighbours = tile.tile_neighbours();
         for (_, neighbour) in neighbours {
@@ -74,7 +75,7 @@ impl RoadTilesResource {
                 new_neighbours.push(neighbour);
             }
         }
-        new_neighbours
+        new_neighbours.into_iter()
     }
 }
 impl Default for RoadTilesResource {
@@ -103,28 +104,25 @@ impl Default for RoadIntersections {
 
 #[derive(Component, Clone, Debug)]
 pub struct Road {
-    pub starting_position: TilePosition,
-    pub ending_position: TilePosition,
+    starting_position: TilePosition,
+    ending_position: TilePosition,
     pub width: f32,
     bezier_curve: CubicCurve<Vec2>,
+    road_length: f32,
 }
 impl Road {
     pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: f32) -> Self {
+        let bezier_curve = straight_bezier_curve(
+            starting_position.to_world_position_2d(),
+            ending_position.to_world_position_2d(),
+        );
+        let road_length = bezier_curve.arclength();
         Self {
             starting_position,
             ending_position,
             width,
-            bezier_curve: CubicBezier::new([[
-                starting_position.to_world_position_2d(),
-                starting_position
-                    .to_world_position_2d()
-                    .lerp(ending_position.to_world_position_2d(), 1.0 / 3.0),
-                starting_position
-                    .to_world_position_2d()
-                    .lerp(ending_position.to_world_position_2d(), 2.0 / 3.0),
-                ending_position.to_world_position_2d(),
-            ]])
-            .to_curve(),
+            bezier_curve,
+            road_length,
         }
     }
     pub fn road_direction(&self) -> CardinalDirection {
@@ -148,39 +146,85 @@ impl Road {
         }
     }
     pub fn road_length(&self) -> f32 {
-        self.bezier_curve
-            .iter_positions(100)
-            .tuple_windows()
-            .map(|(a, b)| a.distance(b))
-            .sum()
+        self.road_length
     }
-    pub fn as_world_positions(
-        &self,
-        heightmaps: &HeightmapsResource,
-        height_offset: f32,
-        horizontal_offset: f32,
-    ) -> Vec<Vec3> {
+    pub fn subdivisions(&self) -> usize {
         let road_length = self.road_length().round() as usize;
         let subdivisions = road_length * TILE_SIZE as usize;
-
-        let normal_vectors = self.bezier_curve.iter_velocities(subdivisions).map(|v| {
+        subdivisions
+    }
+    pub fn normal_vectors(&self) -> impl Iterator<Item = Vec2> + '_ {
+        self.normal_vectors_with_subdivisions(self.subdivisions())
+    }
+    pub fn normal_vectors_with_subdivisions(
+        &self,
+        subdivision: usize,
+    ) -> impl Iterator<Item = Vec2> + '_ {
+        self.bezier_curve.iter_velocities(subdivision).map(|v| {
             //Rotate velocity vector 90 degrees
             let rotated = Vec2::new(v.y, -v.x);
             //Normalize vector
-            let normalized = rotated.normalize_or_zero();
-            //Scale vector
-            normalized * horizontal_offset
-        });
-
+            rotated.normalize_or_zero()
+        })
+    }
+    pub fn as_world_positions<'a>(
+        &'a self,
+        heightmaps: &'a HeightmapsResource,
+        height_offset: f32,
+        horizontal_offset: f32,
+    ) -> impl Iterator<Item = Vec3> + '_ {
+        self.as_2d_positions(horizontal_offset).map(move |p| {
+            let mut position = heightmaps.get_from_world_position_2d(p);
+            position.y += height_offset;
+            position
+        })
+    }
+    pub fn as_2d_positions(&self, horizontal_offset: f32) -> impl Iterator<Item = Vec2> + '_ {
+        self.as_2d_positions_with_subdivision(horizontal_offset, self.subdivisions())
+    }
+    pub fn as_2d_positions_with_subdivision(
+        &self,
+        horizontal_offset: f32,
+        subdivision: usize,
+    ) -> impl Iterator<Item = Vec2> + '_ {
         self.bezier_curve
-            .iter_positions(subdivisions)
-            .zip(normal_vectors)
-            .map(|(p, normal)| {
-                let mut position = heightmaps.get_from_world_position_2d(p + normal);
-                position.y += height_offset;
-                position
-            })
-            .collect_vec()
+            .iter_positions(subdivision)
+            .zip_eq(self.normal_vectors_with_subdivisions(subdivision))
+            .map(move |(p, normal)| p + (normal * horizontal_offset))
+    }
+    pub fn road_tiles(&self) -> impl Iterator<Item = (TilePosition, RoadTile)> {
+        let road = self;
+        let mut road_tiles = Vec::new();
+        let road_width = (road.width / 2.0) - (road.width / 1000.0);
+        let subdivison_multipler = 10;
+
+        let positions = self
+            .as_2d_positions_with_subdivision(
+                -road_width,
+                self.subdivisions() * subdivison_multipler,
+            )
+            .zip_eq(self.as_2d_positions_with_subdivision(
+                road_width,
+                self.subdivisions() * subdivison_multipler,
+            ));
+        for (starting, ending) in positions {
+            let curve = straight_bezier_curve(starting, ending);
+            let curve_length = curve.arclength().ceil() as usize;
+            let subdivisions = curve_length * TILE_SIZE as usize;
+            let curve_positions = curve.iter_positions(subdivisions);
+            for position in curve_positions {
+                let position = Vec3::new(position.x, 0.0, position.y);
+                let position = TilePosition::from_world_position(position);
+                road_tiles.push((
+                    position,
+                    RoadTile {
+                        position,
+                        direction: road.road_direction(),
+                    },
+                ));
+            }
+        }
+        road_tiles.into_iter().unique()
     }
 }
 
@@ -205,7 +249,6 @@ fn exit(mut commands: Commands) {
 fn highlight_road_segments(
     roads: Query<&Road>,
     mut gizmos: Gizmos,
-    //heightmaps: Query<&Heightmap, &ChunkPosition>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
     heightmaps: Res<HeightmapsResource>,
 ) {
@@ -214,18 +257,8 @@ fn highlight_road_segments(
         //    position: road.clone(),
         //    color: Color::VIOLET,
         //});
-        let road_width = road.width / 2.0;
         let cubic_curve = road.as_world_positions(&heightmaps, 0.1, 0.0);
         gizmos.linestrip(cubic_curve, Color::VIOLET);
-        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, -road_width);
-        gizmos.linestrip(cubic_curve, Color::VIOLET);
-        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, road_width);
-        gizmos.linestrip(cubic_curve, Color::VIOLET);
-        //gizmos.line(
-        //    road.starting_position.to_world_position(),
-        //    road.ending_position.to_world_position(),
-        //    Color::VIOLET,
-        //);
     }
 }
 
@@ -241,7 +274,7 @@ fn road_tool(
     match current_tool.tool_type {
         ToolType::BuildRoad => {
             let width = current_tool.tool_strength.round();
-            if width < 0.0 {
+            if width <= 0.0 {
                 return;
             }
 
@@ -275,7 +308,7 @@ fn road_tool(
                 snapped_position,
                 width,
             );
-            let road_tiles = calculate_road_tiles(&road);
+            let road_tiles = road.road_tiles();
             for (road_position, _) in road_tiles {
                 //Occupied tiles are red, unoccupied are green
                 if occupied_road_tiles.tiles.contains_key(&road_position) {
@@ -313,6 +346,7 @@ fn road_tool(
 fn spawn_road_event_handler(
     mut commands: Commands,
     mut mesh_assets: ResMut<Assets<Mesh>>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
     heightmaps: Res<HeightmapsResource>,
     mut spawn_road_events: EventReader<SpawnRoadEvent>,
     mut occupied_road_tiles: ResMut<RoadTilesResource>,
@@ -320,29 +354,38 @@ fn spawn_road_event_handler(
 ) {
     for spawn_road_event in spawn_road_events.read() {
         let road = &spawn_road_event.road;
-        let road_tiles = calculate_road_tiles(road);
-        for (road_position, road_tile) in road_tiles.iter() {
-            //Adds the road to the occupied tiles
-            match occupied_road_tiles.tiles.insert(*road_position, *road_tile) {
+        let road_tiles = road.road_tiles();
+        //Adds the road to the occupied tiles
+        for (road_position, road_tile) in road_tiles {
+            match occupied_road_tiles.tiles.insert(road_position, road_tile) {
                 Some(_) => {
                     road_intersections
                         .intersections
-                        .entry(*road_position)
+                        .entry(road_position)
                         .or_default()
                         .push(road.clone());
                 }
                 None => {}
             }
-            //Create Road Mesh
-            //let mesh = mesh_assets.add(create_road_mesh(road, &heightmaps));
-
-            //Spawns road bundle
-            //TODO add road material
-            //commands.spawn(RoadBundle {
-            //    road: road.clone(),
-            //    pbr: PbrBundle { mesh, ..default() },
-            //});
         }
+
+        //Create Road Mesh
+        let mesh = mesh_assets.add(create_road_mesh(road, &heightmaps));
+
+        //TODO make unique road material
+        let mut material: StandardMaterial = Color::rgb(0.1, 0.1, 0.1).into();
+        material.perceptual_roughness = 1.0;
+        material.reflectance = 0.0;
+        let material = material_assets.add(material);
+        //Spawns road bundle
+        commands.spawn(RoadBundle {
+            road: road.clone(),
+            pbr: PbrBundle {
+                mesh,
+                material,
+                ..default()
+            },
+        });
     }
 }
 
@@ -352,11 +395,11 @@ fn create_road_entity(
     mut materials: ResMut<Assets<StandardMaterial>>,
     heightmaps: Res<HeightmapsResource>,
     occupied_road_tiles: Res<RoadTilesResource>,
-    mut road_entity: Local<Option<Entity>>,
+    //mut road_entity: Local<Option<Entity>>,
     //mut road_graph: ResMut<RoadGraph>,
     mut edit_tile_events: EventWriter<EditTileEvent>,
 ) {
-    if occupied_road_tiles.is_changed() || road_entity.is_none() {
+    if occupied_road_tiles.is_changed() {
         let mut meshes: Vec<Mesh> = Vec::new();
         let mut transforms = Vec::new();
         for (tile_position, road_tile) in occupied_road_tiles.tiles.iter() {
@@ -412,7 +455,7 @@ fn create_road_entity(
         material.perceptual_roughness = 1.0;
         material.reflectance = 0.0;
 
-        let mesh_handle = mesh_assets.add(mesh.into());
+        /* let mesh_handle = mesh_assets.add(mesh.into());
         if let Some(road_entity) = road_entity.as_mut() {
             commands.entity(*road_entity).despawn_recursive();
         }
@@ -425,63 +468,8 @@ fn create_road_entity(
                     ..default()
                 })
                 .id(),
-        );
+        ); */
     }
-}
-
-fn calculate_road_tiles(road: &Road) -> Vec<(TilePosition, RoadTile)> {
-    let starting_position = road.starting_position.position_2d();
-    let ending_position = road.ending_position.position_2d();
-    let road_direction = road.road_direction();
-    let tiles = Bresenham::new(starting_position.into(), ending_position.into())
-        .into_iter()
-        .map(|(x, y)| {
-            let position = TilePosition {
-                position: IVec3::new(x, 0, y),
-            };
-            (
-                position,
-                RoadTile {
-                    position,
-                    direction: road_direction,
-                },
-            )
-        })
-        .into_iter();
-
-    let diagonal_tiles = match road_direction {
-        CardinalDirection::NorthEast
-        | CardinalDirection::SouthEast
-        | CardinalDirection::SouthWest
-        | CardinalDirection::NorthWest => {
-            let directions = road_direction.split_direction();
-            let mut diagonal_tiles = vec![];
-            for direction in directions {
-                let starting_position = (road.starting_position + direction).position_2d();
-                let ending_position =
-                    ((road.ending_position + direction) - road_direction).position_2d();
-                let tiles = Bresenham::new(starting_position.into(), ending_position.into())
-                    .into_iter()
-                    .map(|(x, y)| {
-                        let position = TilePosition {
-                            position: IVec3::new(x, 0, y),
-                        };
-                        (
-                            position,
-                            RoadTile {
-                                position,
-                                direction: road_direction,
-                            },
-                        )
-                    });
-                diagonal_tiles.extend(tiles);
-            }
-            diagonal_tiles
-        }
-        _ => Vec::new(),
-    };
-    let tiles = tiles.chain(diagonal_tiles);
-    tiles.unique().collect_vec()
 }
 
 fn snap_to_straight_line(

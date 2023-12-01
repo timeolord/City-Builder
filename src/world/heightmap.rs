@@ -1,7 +1,7 @@
 use array2d::Array2D;
 use bevy::{
     ecs::system::Resource,
-    math::{UVec2, Vec3, Vec3Swizzles, Vec2},
+    math::{UVec2, Vec2, Vec3, Vec3Swizzles},
 };
 use noise::{NoiseFn, Perlin};
 use std::ops::{Index, IndexMut};
@@ -9,7 +9,7 @@ use std::ops::{Index, IndexMut};
 use crate::{
     chunk::chunk_tile_position::{ChunkPosition, TilePosition, TilePosition2D},
     constants::{CHUNK_SIZE, HEIGHT_STEP, TILE_SIZE},
-    math_utils::{round_to, unnormalized_normal_array},
+    math_utils::{unnormalized_normal_array, RoundBy},
 };
 
 use super::WorldSize;
@@ -177,10 +177,10 @@ pub fn generate_heightmap(seed: u32, position: ChunkPosition) -> Heightmap {
             ])) * NOISE_AMPLITUDE;
 
             let heights = [
-                round_to(top_left as f32, HEIGHT_STEP),
-                round_to(top_right as f32, HEIGHT_STEP),
-                round_to(bottom_right as f32, HEIGHT_STEP),
-                round_to(bottom_left as f32, HEIGHT_STEP),
+                (top_left as f32).round_by(HEIGHT_STEP),
+                (top_right as f32).round_by(HEIGHT_STEP),
+                (bottom_right as f32).round_by(HEIGHT_STEP),
+                (bottom_left as f32).round_by(HEIGHT_STEP),
             ];
 
             heightmap.heightmap[(x as usize, y as usize)] = heights;

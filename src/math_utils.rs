@@ -1,13 +1,17 @@
 use std::{borrow::Borrow, ops::Add};
 
-use bevy::math::{cubic_splines::CubicCurve, Vec2, Vec3};
+use bevy::math::{
+    cubic_splines::{CubicBezier, CubicCurve, CubicGenerator},
+    Vec2, Vec3,
+};
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 
 use crate::world::{heightmap::HeightmapsResource, road::Road};
 
 pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
-    let normal = (Vec3::from_array(b) - Vec3::from_array(a)).cross(Vec3::from_array(c) - Vec3::from_array(a));
+    let normal = (Vec3::from_array(b) - Vec3::from_array(a))
+        .cross(Vec3::from_array(c) - Vec3::from_array(a));
     if normal.length().is_sign_negative() {
         -normal
     } else {
@@ -36,8 +40,39 @@ pub fn average_vectors<const N: usize>(list: [Vec3; N]) -> Vec3 {
     sum / N as f32
 }
 
-pub fn round_to(x: f32, n: f32) -> f32 {
-    (x / n).round() * n
+pub trait RoundBy {
+    fn round_by(&self, n: Self) -> Self;
+}
+impl RoundBy for f32 {
+    fn round_by(&self, n: Self) -> Self {
+        (self / n).round() * n
+    }
+}
+impl RoundBy for f64 {
+    fn round_by(&self, n: Self) -> Self {
+        (self / n).round() * n
+    }
+}
+
+pub fn straight_bezier_curve(starting_position: Vec2, ending_position: Vec2) -> CubicCurve<Vec2> {
+    CubicBezier::new([[
+        starting_position,
+        starting_position.lerp(ending_position, 1.0 / 3.0),
+        starting_position.lerp(ending_position, 2.0 / 3.0),
+        ending_position,
+    ]])
+    .to_curve()
+}
+pub trait Arclength {
+    fn arclength(&self) -> f32;
+}
+impl Arclength for CubicCurve<Vec2> {
+    fn arclength(&self) -> f32 {
+        self.iter_positions(100)
+            .tuple_windows()
+            .map(|(a, b)| a.distance(b))
+            .sum()
+    }
 }
 
 pub trait Mean: Iterator {

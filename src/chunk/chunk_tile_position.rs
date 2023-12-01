@@ -246,13 +246,13 @@ pub enum CardinalDirection {
     NorthWest = 7,
 }
 impl CardinalDirection {
-    pub fn non_compound_directions() -> Vec<CardinalDirection> {
-        vec![
+    pub fn non_compound_directions() -> impl Iterator<Item=CardinalDirection> {
+        [
             CardinalDirection::North,
             CardinalDirection::East,
             CardinalDirection::South,
             CardinalDirection::West,
-        ]
+        ].into_iter()
     }
     pub fn split_direction(&self) -> [CardinalDirection; 2] {
         match self {

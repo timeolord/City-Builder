@@ -11,7 +11,7 @@ use itertools::Itertools;
 use crate::{
     chunk::chunk_tile_position::TilePosition2D,
     constants::{CHUNK_SIZE, GRID_THICKNESS, TILE_SIZE},
-    math_utils::{unnormalized_normal_array, normal_vector},
+    math_utils::{normal_vector, unnormalized_normal_array},
     world::{
         heightmap::{Heightmap, HeightmapVertex, HeightmapsResource},
         road::Road,
@@ -357,18 +357,15 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
 }
 
 pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
-    let height_offset = 0.01;
+    let height_offset = 0.1;
 
     let road_width = road.width / 2.0;
     let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
     let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
 
-    let length = left_spline.len();
-
     let vertices = left_spline
-        .into_iter()
         .tuple_windows::<(_, _)>()
-        .zip_eq(right_spline.into_iter().tuple_windows::<(_, _)>())
+        .zip_eq(right_spline.tuple_windows::<(_, _)>())
         .map(|((a, b), (c, d))| [a, b, c, d])
         .collect_vec();
 
@@ -380,15 +377,33 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
 
     let normals = vertices
         .iter()
-        .map(|[a, b, c, d]| {
-            let normal = normal_vector(*a, *b, *c)
-                .to_array();
+        .map(|[a, b, c, _]| {
+            let normal = normal_vector(*a, *b, *c).to_array();
             [normal, normal, normal, normal]
         })
         .flatten()
         .collect_vec();
 
-    todo!()
+    let indices = vertices
+        .iter()
+        .enumerate()
+        .map(|(i, verts)| {
+            let i = i as u32 * verts.len() as u32;
+            [i + 2, i + 0, i + 1, i + 2, i + 1, i + 3]
+        })
+        .flatten()
+        .collect_vec();
+
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    mesh.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        vertices.into_iter().flatten().collect_vec(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.set_indices(Some(Indices::U32(indices)));
+
+    mesh
 }
 
 pub fn combine_meshes(
