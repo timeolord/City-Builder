@@ -17,32 +17,37 @@ use crate::{
 use super::{
     heightmap::{HeightmapVertex, HeightmapsResource},
     tools::{CurrentTool, ToolType},
+    WorldSettings,
 };
 
 pub struct TerraformPlugin;
 
 impl Plugin for TerraformPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<EditTileEvent>();
+        /* app.add_event::<EditTileEvent>(); */
         app.add_event::<RegenerateChunkEvent>();
         app.add_systems(
             Update,
             (tile_editor_tool,).run_if(in_state(GameState::World)),
         );
-        app.add_systems(
+        /* app.add_systems(
             PostUpdate,
             (edit_tile_event_handler, regenerate_chunk_event_handler)
                 .chain()
                 .run_if(in_state(GameState::World)),
+        ); */
+        app.add_systems(
+            PostUpdate,
+            (regenerate_changed_chunks).run_if(in_state(GameState::World)),
         );
     }
 }
-
+/*
 #[derive(Event)]
 pub struct EditTileEvent {
     pub tile_position: TilePosition,
     pub new_vertices: HeightmapVertex,
-}
+} */
 
 #[derive(Event, Eq, PartialEq, Debug, Copy, Clone, Hash)]
 struct RegenerateChunkEvent {
@@ -51,30 +56,26 @@ struct RegenerateChunkEvent {
 fn tile_editor_tool(
     tool_resource: Res<CurrentTool>,
     current_tile: Res<CurrentTile>,
-    mut edit_tile_event: EventWriter<EditTileEvent>,
     mouse_button: Res<Input<MouseButton>>,
-    heightmaps: Res<HeightmapsResource>,
+    mut heightmaps: ResMut<HeightmapsResource>,
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
-        let current_tile = current_tile.to_owned().position;
+        let current_tile = current_tile.position;
         match tool_resource.tool_type {
             ToolType::TileEditor => {
                 let tile_heights = heightmaps[current_tile];
                 let average_height = tile_heights.into_iter().mean_f32();
-                let new_heights = vec![(average_height + tool_resource.tool_strength).floor(); 5]
+                let new_heights = vec![(average_height + tool_resource.tool_strength).floor(); 4]
                     .try_into()
                     .unwrap();
-                edit_tile_event.send(EditTileEvent {
-                    tile_position: current_tile,
-                    new_vertices: new_heights,
-                })
+                heightmaps.edit_tile(current_tile, new_heights);
             }
             _ => {}
         }
     }
 }
 
-fn edit_tile_event_handler(
+/* fn edit_tile_event_handler(
     mut edit_tile_events: EventReader<EditTileEvent>,
     mut heightmaps: ResMut<HeightmapsResource>,
     mut regenerate_chunk_event: EventWriter<RegenerateChunkEvent>,
@@ -258,4 +259,23 @@ fn regenerate_chunk_event_handler(
             }
         }
     }
+} */
+
+fn regenerate_changed_chunks(
+    chunks: Query<&ChunkPosition>,
+    mut heightmaps: ResMut<HeightmapsResource>,
+    mut spawn_chunk_events: EventWriter<SpawnChunkEvent>,
+) {
+    if !heightmaps.is_changed() {
+        return;
+    }
+    //Regenerate Dirty Chunks
+    heightmaps
+        .get_dirty_chunks()
+        .iter()
+        .for_each(|chunk_position| {
+            spawn_chunk_events.send(SpawnChunkEvent {
+                position: *chunk_position,
+            });
+        });
 }

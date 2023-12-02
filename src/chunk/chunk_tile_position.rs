@@ -6,6 +6,7 @@ use bevy::{
     prelude::Vec3,
 };
 use enum_map::{Enum, EnumMap};
+use num_traits::AsPrimitive;
 
 use crate::{
     constants::{CHUNK_SIZE, TILE_SIZE},
@@ -23,6 +24,9 @@ pub struct ChunkPosition {
 impl ChunkPosition {
     pub fn from_world_position(world_position: Vec3) -> ChunkPosition {
         TilePosition::from_world_position(world_position).chunk_position()
+    }
+    pub fn as_tuple<T>(&self) -> (T, T) where u32: AsPrimitive<T>, T: Copy + 'static{
+        (self.position.x.as_(), self.position.y.as_())
     }
 }
 pub type Neighbours<T> = EnumMap<CardinalDirection, T>;

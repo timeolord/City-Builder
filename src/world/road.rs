@@ -21,7 +21,6 @@ use self::{pathfinding::PathfindingPlugin, road_tile::RoadTile};
 
 use super::{
     heightmap::HeightmapsResource,
-    terraform::EditTileEvent,
     tile_highlight::HighlightTileEvent,
     tools::{CurrentTool, ToolType},
 };
@@ -397,7 +396,7 @@ fn create_road_entity(
     occupied_road_tiles: Res<RoadTilesResource>,
     //mut road_entity: Local<Option<Entity>>,
     //mut road_graph: ResMut<RoadGraph>,
-    mut edit_tile_events: EventWriter<EditTileEvent>,
+    //mut edit_tile_events: EventWriter<EditTileEvent>,
 ) {
     if occupied_road_tiles.is_changed() {
         let mut meshes: Vec<Mesh> = Vec::new();
@@ -433,10 +432,10 @@ fn create_road_entity(
                     //heights[4] = (heights[1] + heights[3]) / 2.0;
                 }
             }
-            edit_tile_events.send(EditTileEvent {
-                tile_position: *tile_position,
-                new_vertices: heights,
-            });
+            //edit_tile_events.send(EditTileEvent {
+            //    tile_position: *tile_position,
+            //    new_vertices: heights,
+            //});
             let mesh = create_box_mesh(heights, 0.1);
             let transform = Transform::from_translation(tile_position.to_world_position());
 

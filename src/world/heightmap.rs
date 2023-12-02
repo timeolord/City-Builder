@@ -17,14 +17,15 @@ use super::WorldSize;
 const NOISE_SCALE: f64 = 0.025;
 const NOISE_AMPLITUDE: f64 = 20.0;
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct HeightmapsResource {
     pub heightmaps: Array2D<Heightmap>,
+    dirty_chunks: Array2D<bool>,
 }
 impl HeightmapsResource {
     pub fn new(world_size: WorldSize, seed: u32) -> Self {
         let mut heightmaps = Array2D::filled_with(
-            Heightmap::new(),
+            Heightmap::default(),
             world_size[0] as usize,
             world_size[1] as usize,
         );
@@ -38,7 +39,13 @@ impl HeightmapsResource {
                 );
             }
         }
-        Self { heightmaps }
+        let dirty_chunks =
+            Array2D::filled_with(false, world_size[0] as usize, world_size[1] as usize);
+
+        Self {
+            heightmaps,
+            dirty_chunks,
+        }
     }
     pub fn get_from_world_position(&self, position: Vec3) -> Vec3 {
         self[TilePosition::from_world_position(position).chunk_position()]
@@ -48,6 +55,34 @@ impl HeightmapsResource {
         let position = Vec3::new(position.x, 0.0, position.y);
         self[TilePosition::from_world_position(position).chunk_position()]
             .get_from_world_position(position)
+    }
+    pub fn edit_tile(&mut self, position: TilePosition, heights: [f32; 4]) {
+        self.dirty_chunks[position.chunk_position().as_tuple()] = true;
+        self[position] = heights;
+    }
+    pub fn get_dirty_chunks(&mut self) -> Vec<ChunkPosition> {
+        let mut dirty_chunks = Vec::new();
+        for x in 0..self.dirty_chunks.num_rows() {
+            for y in 0..self.dirty_chunks.num_columns() {
+                if self.dirty_chunks[(x, y)] {
+                    dirty_chunks.push(ChunkPosition {
+                        position: UVec2::new(x as u32, y as u32),
+                    });
+                }
+            }
+        }
+        dirty_chunks.iter().for_each(|chunk| {
+            self.dirty_chunks[chunk.as_tuple()] = false;
+        });
+        dirty_chunks
+    }
+}
+impl Default for HeightmapsResource {
+    fn default() -> Self {
+        Self {
+            heightmaps: Array2D::filled_with(Heightmap::default(), 0, 0),
+            dirty_chunks: Array2D::filled_with(false, 0, 0),
+        }
     }
 }
 impl Index<ChunkPosition> for HeightmapsResource {
@@ -78,19 +113,13 @@ impl IndexMut<TilePosition> for HeightmapsResource {
 }
 
 pub type HeightmapVertex = [f32; 4];
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Heightmap {
     heightmap: Array2D<HeightmapVertex>,
 }
 impl Heightmap {
     pub fn new() -> Self {
-        Self {
-            heightmap: Array2D::filled_with(
-                vec![0.0; 4].try_into().unwrap(),
-                CHUNK_SIZE as usize,
-                CHUNK_SIZE as usize,
-            ),
-        }
+        Self::default()
     }
     fn get_from_world_position(&self, position: Vec3) -> Vec3 {
         let tile_position = TilePosition::from_world_position(position);
@@ -100,6 +129,17 @@ impl Heightmap {
         let vert_1 = [1.0, heights[1], 0.0];
         let vert_2 = [1.0, heights[2], 1.0];
         interpolate_height(vert_0, vert_2, vert_1, normalized_world_position, position)
+    }
+}
+impl Default for Heightmap {
+    fn default() -> Self {
+        Self {
+            heightmap: Array2D::filled_with(
+                vec![0.0; 4].try_into().unwrap(),
+                CHUNK_SIZE as usize,
+                CHUNK_SIZE as usize,
+            ),
+        }
     }
 }
 
