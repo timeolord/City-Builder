@@ -5,11 +5,12 @@ use bevy::{
 };
 use noise::{NoiseFn, Perlin};
 use std::ops::{Index, IndexMut};
+use bevy_easings::Lerp;
 
 use crate::{
-    chunk::chunk_tile_position::{ChunkPosition, TilePosition, TilePosition2D},
+    chunk::chunk_tile_position::{CardinalDirection, ChunkPosition, TilePosition, TilePosition2D},
     constants::{CHUNK_SIZE, HEIGHT_STEP, TILE_SIZE},
-    math_utils::{unnormalized_normal_array, RoundBy},
+    math_utils::{unnormalized_normal_array, Mean, RoundBy},
 };
 
 use super::WorldSize;
@@ -102,7 +103,7 @@ impl HeightmapsResource {
             }
         }
     }
-    pub fn get_dirty_chunks(&mut self) -> impl Iterator<Item=ChunkPosition> {
+    pub fn get_dirty_chunks(&mut self) -> impl Iterator<Item = ChunkPosition> {
         let mut dirty_chunks = Vec::new();
         for x in 0..self.dirty_chunks.num_rows() {
             for y in 0..self.dirty_chunks.num_columns() {
@@ -135,10 +136,34 @@ impl Index<ChunkPosition> for HeightmapsResource {
         &self.heightmaps[index]
     }
 }
+impl Index<&ChunkPosition> for HeightmapsResource {
+    type Output = Heightmap;
+
+    fn index(&self, index: &ChunkPosition) -> &Self::Output {
+        &self[*index]
+    }
+}
+impl Index<&mut ChunkPosition> for HeightmapsResource {
+    type Output = Heightmap;
+
+    fn index(&self, index: &mut ChunkPosition) -> &Self::Output {
+        &self[*index]
+    }
+}
 impl IndexMut<ChunkPosition> for HeightmapsResource {
     fn index_mut(&mut self, index: ChunkPosition) -> &mut Self::Output {
         let index = (index.position.x as usize, index.position.y as usize);
         &mut self.heightmaps[index]
+    }
+}
+impl IndexMut<&ChunkPosition> for HeightmapsResource {
+    fn index_mut(&mut self, index: &ChunkPosition) -> &mut Self::Output {
+        &mut self[*index]
+    }
+}
+impl IndexMut<&mut ChunkPosition> for HeightmapsResource {
+    fn index_mut(&mut self, index: &mut ChunkPosition) -> &mut Self::Output {
+        &mut self[*index]
     }
 }
 impl Index<TilePosition> for HeightmapsResource {
@@ -148,13 +173,66 @@ impl Index<TilePosition> for HeightmapsResource {
         &self[index.chunk_position()][index.to_relative_tile_position().position_2d()]
     }
 }
+impl Index<&TilePosition> for HeightmapsResource {
+    type Output = HeightmapVertex;
+
+    fn index(&self, index: &TilePosition) -> &Self::Output {
+        &self[*index]
+    }
+}
+impl Index<&mut TilePosition> for HeightmapsResource {
+    type Output = HeightmapVertex;
+
+    fn index(&self, index: &mut TilePosition) -> &Self::Output {
+        &self[*index]
+    }
+}
 impl IndexMut<TilePosition> for HeightmapsResource {
     fn index_mut(&mut self, index: TilePosition) -> &mut Self::Output {
         &mut self[index.chunk_position()][index.to_relative_tile_position().position_2d()]
     }
 }
+impl IndexMut<&TilePosition> for HeightmapsResource {
+    fn index_mut(&mut self, index: &TilePosition) -> &mut Self::Output {
+        &mut self[*index]
+    }
+}
+impl IndexMut<&mut TilePosition> for HeightmapsResource {
+    fn index_mut(&mut self, index: &mut TilePosition) -> &mut Self::Output {
+        &mut self[*index]
+    }
+}
 
 pub type HeightmapVertex = [f32; 4];
+pub trait FlattenWithDirection {
+    fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self;
+}
+impl FlattenWithDirection for HeightmapVertex {
+    fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self {
+        match direction {
+            CardinalDirection::North | CardinalDirection::South => {
+                self[2] = self[1];
+                self[3] = self[0];
+            }
+            CardinalDirection::NorthEast | CardinalDirection::SouthWest => {
+                let mean = [self[0], self[2]].into_iter().mean_f32();
+                self[1] = mean;
+                self[3] = mean;
+            }
+            CardinalDirection::East | CardinalDirection::West => {
+                self[0] = self[1];
+                self[3] = self[2];
+            }
+            CardinalDirection::SouthEast | CardinalDirection::NorthWest => {
+                let mean = [self[1], self[3]].into_iter().mean_f32();
+                self[0] = mean;
+                self[2] = mean;
+            }
+        }
+        self
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub struct Heightmap {
     heightmap: Array2D<HeightmapVertex>,
@@ -167,10 +245,12 @@ impl Heightmap {
         let tile_position = TilePosition::from_world_position(position);
         let normalized_world_position = position.xz().fract().abs() + f32::EPSILON;
         let heights = self[tile_position.to_relative_tile_position()];
-        let vert_0 = [0.0, heights[0], 0.0];
-        let vert_1 = [1.0, heights[1], 0.0];
-        let vert_2 = [1.0, heights[2], 1.0];
-        interpolate_height(vert_0, vert_2, vert_1, normalized_world_position, position)
+        //Bilinear Interpolation to get the height
+        //Not sure that this is actually correct, but visually I can't tell
+        let x_1 = &[heights[0]].lerp(&[heights[1]], &normalized_world_position.x);
+        let x_2 = &[heights[3]].lerp(&[heights[2]], &normalized_world_position.x);
+        let y = x_1.lerp(x_2, &normalized_world_position.y);
+        Vec3::new(position.x, y[0], position.z)
     }
 }
 impl Default for Heightmap {
@@ -183,23 +263,6 @@ impl Default for Heightmap {
             ),
         }
     }
-}
-
-fn interpolate_height(
-    vert_0: [f32; 3],
-    vert_1: [f32; 3],
-    vert_2: [f32; 3],
-    normalized_world_position: bevy::prelude::Vec2,
-    position: Vec3,
-) -> Vec3 {
-    let normal_vector = unnormalized_normal_array(vert_0, vert_1, vert_2);
-    let d = normal_vector.dot(vert_0.into());
-    let height = (-normal_vector.x * normalized_world_position.x
-        - normal_vector.z * normalized_world_position.y
-        + d)
-        / normal_vector.y;
-
-    Vec3::new(position.x, height.abs(), position.z)
 }
 
 impl Index<TilePosition2D> for Heightmap {

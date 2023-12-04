@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     chunk::chunk_tile_position::{TilePosition, TilePosition2D},
     constants::DEBUG,
-    world::{buildings::NeedsPathFinding, tile_highlight::HighlightTileEvent},
+    world::{buildings::NeedsPathFinding, tile_highlight::{HighlightTileEvent, Duration}},
     GameState,
 };
 
@@ -61,6 +61,7 @@ fn find_path_event_handler(
                     highlight_tile_events.send(HighlightTileEvent {
                         position: TilePosition::from_position_2d(*position),
                         color: Color::GOLD,
+                        duration: Duration::Timed(std::time::Duration::from_secs(1)),
                     });
                 }
 

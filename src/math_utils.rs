@@ -1,13 +1,22 @@
-use std::{borrow::Borrow, ops::Add};
+use std::{
+    borrow::Borrow,
+    ops::{Add, Div},
+};
 
 use bevy::math::{
     cubic_splines::{CubicBezier, CubicCurve, CubicGenerator},
     Vec2, Vec3,
 };
 use itertools::Itertools;
-use num_traits::AsPrimitive;
+use num_traits::{AsPrimitive, FromPrimitive};
 
-use crate::world::{heightmap::HeightmapsResource, road::Road};
+use crate::{
+    chunk::chunk_tile_position::CardinalDirection,
+    world::{
+        heightmap::{HeightmapVertex, HeightmapsResource},
+        road::Road,
+    },
+};
 
 pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
     let normal = (Vec3::from_array(b) - Vec3::from_array(a))
@@ -75,12 +84,12 @@ impl Arclength for CubicCurve<Vec2> {
     }
 }
 
-pub trait Mean: Iterator {
-    fn mean_f32<T, K>(&mut self) -> f32
+pub trait Mean {
+    fn mean_f32<T, K>(&mut self) -> T
     where
         Self: Iterator<Item = K>,
         K: Borrow<T> + Copy,
-        T: Default + Add<T, Output = T> + AsPrimitive<f32>,
+        T: Default + Add<T, Output = T> + Div<f32, Output = T> + Copy,
     {
         let mut sum = T::default();
         let mut count: usize = 0;
@@ -88,15 +97,14 @@ pub trait Mean: Iterator {
             sum = sum + *item.borrow();
             count += 1;
         }
-        let sum: f32 = sum.as_();
         sum / count as f32
     }
 
-    fn mean_f64<T, K>(&mut self) -> f64
+    fn mean_f64<T, K>(&mut self) -> T
     where
         Self: Iterator<Item = K>,
         K: Borrow<T> + Copy,
-        T: Default + Add<T, Output = T> + AsPrimitive<f64>,
+        T: Default + Add<T, Output = T> + Div<f64, Output = T> + Copy,
     {
         let mut sum = T::default();
         let mut count: usize = 0;
@@ -104,7 +112,6 @@ pub trait Mean: Iterator {
             sum = sum + *item.borrow();
             count += 1;
         }
-        let sum: f64 = sum.as_();
         sum / count as f64
     }
 }

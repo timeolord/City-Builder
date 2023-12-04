@@ -3,7 +3,7 @@ use bevy_mod_raycast::prelude::*;
 
 use crate::{
     chunk::{chunk_tile_position::TilePosition, Chunk},
-    world::{heightmap::HeightmapsResource, tile_highlight::HighlightTileEvent, WorldSettings},
+    world::{heightmap::HeightmapsResource, tile_highlight::{HighlightTileEvent, Duration}, WorldSettings},
     GameState,
 };
 
@@ -66,6 +66,7 @@ fn tile_cursor(
                     highlight_tile_events.send(HighlightTileEvent {
                         position: current_tile.position,
                         color: Color::BLUE,
+                        duration: Duration::Once,
                     });
 
                     let pos = heightmaps.get_from_world_position(intersection_pos);

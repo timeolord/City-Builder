@@ -17,18 +17,37 @@ impl Plugin for TileHighlightPlugin {
 pub struct HighlightTileEvent {
     pub position: TilePosition,
     pub color: Color,
+    pub duration: Duration,
+}
+
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
+pub enum Duration {
+    Permanent,
+    Once,
+    Timed(std::time::Duration),
 }
 
 fn tile_highlight_handler(
     mut tile_highlight_events: EventReader<HighlightTileEvent>,
     mut gizmos: Gizmos,
     heightmap_query: Res<HeightmapsResource>,
+    mut permanent_events: Local<Vec<HighlightTileEvent>>,
 ) {
-    for event in tile_highlight_events.read() {
+    let mut temp_events = Vec::new();
+    for event in tile_highlight_events.read().chain(permanent_events.iter()) {
+        if event.duration == Duration::Permanent {
+            let new_event = HighlightTileEvent {
+                position: event.position,
+                color: event.color,
+                duration: Duration::Once,
+            };
+            temp_events.push(new_event);
+        }
         let height = heightmap_query[event.position];
 
         let mut position = event.position.to_world_position();
         position.y = height.into_iter().reduce(f32::max).unwrap_or(0.0);
         gizmos.sphere(position, Quat::IDENTITY, 0.5, event.color);
     }
+    permanent_events.extend(temp_events.into_iter());
 }
