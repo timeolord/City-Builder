@@ -19,7 +19,7 @@ const NOISE_AMPLITUDE: f64 = 20.0;
 
 #[derive(Resource, Clone)]
 pub struct HeightmapsResource {
-    pub heightmaps: Array2D<Heightmap>,
+    heightmaps: Array2D<Heightmap>,
     dirty_chunks: Array2D<bool>,
 }
 impl HeightmapsResource {
@@ -57,10 +57,52 @@ impl HeightmapsResource {
             .get_from_world_position(position)
     }
     pub fn edit_tile(&mut self, position: TilePosition, heights: [f32; 4]) {
-        self.dirty_chunks[position.chunk_position().as_tuple()] = true;
-        self[position] = heights;
+        self.edit_tiles(vec![position], vec![heights])
     }
-    pub fn get_dirty_chunks(&mut self) -> Vec<ChunkPosition> {
+    pub fn edit_tiles(&mut self, positions: Vec<TilePosition>, heights: Vec<[f32; 4]>) {
+        for (position, heights) in positions.iter().zip(heights.into_iter()) {
+            self.dirty_chunks[position.chunk_position().as_tuple()] = true;
+            self[*position] = heights;
+            for (direction, neighbour) in position.tile_neighbours() {
+                if positions.contains(&neighbour) {
+                    continue;
+                }
+                self.dirty_chunks[neighbour.chunk_position().as_tuple()] = true;
+                //Make neighbours conform to the edited tile
+                match direction {
+                    crate::chunk::chunk_tile_position::CardinalDirection::North => {
+                        self[neighbour][0] = heights[1];
+                        self[neighbour][3] = heights[2];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::NorthEast => {
+                        self[neighbour][0] = heights[2];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::East => {
+                        self[neighbour][0] = heights[3];
+                        self[neighbour][1] = heights[2];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::SouthEast => {
+                        self[neighbour][1] = heights[3];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::South => {
+                        self[neighbour][1] = heights[0];
+                        self[neighbour][2] = heights[3];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::SouthWest => {
+                        self[neighbour][2] = heights[0];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::West => {
+                        self[neighbour][2] = heights[1];
+                        self[neighbour][3] = heights[0];
+                    }
+                    crate::chunk::chunk_tile_position::CardinalDirection::NorthWest => {
+                        self[neighbour][3] = heights[1];
+                    }
+                }
+            }
+        }
+    }
+    pub fn get_dirty_chunks(&mut self) -> impl Iterator<Item=ChunkPosition> {
         let mut dirty_chunks = Vec::new();
         for x in 0..self.dirty_chunks.num_rows() {
             for y in 0..self.dirty_chunks.num_columns() {
@@ -74,7 +116,7 @@ impl HeightmapsResource {
         dirty_chunks.iter().for_each(|chunk| {
             self.dirty_chunks[chunk.as_tuple()] = false;
         });
-        dirty_chunks
+        dirty_chunks.into_iter()
     }
 }
 impl Default for HeightmapsResource {

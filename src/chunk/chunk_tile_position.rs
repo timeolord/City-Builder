@@ -32,7 +32,6 @@ impl ChunkPosition {
 pub type Neighbours<T> = EnumMap<CardinalDirection, T>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-
 pub struct TilePosition {
     pub position: IVec3,
 }
