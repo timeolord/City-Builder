@@ -57,22 +57,27 @@ struct WorldEntity;
 
 pub type WorldSize = [u32; 2];
 
-#[derive(Resource)]
+#[derive(Resource, Clone, Copy)]
 pub struct WorldSettings {
     pub world_size: WorldSize,
     pub seed: u32,
     pub grid_visibility: Visibility,
+    pub noise_scale: f64,
+    pub noise_amplitude: f64,
 }
 
 fn init(mut commands: Commands) {
     let world_size = [4, 4];
     let seed: u32 = 0;
-    commands.insert_resource(WorldSettings {
+    let world_settings = WorldSettings {
         world_size,
         seed,
         grid_visibility: Visibility::Visible,
-    });
-    commands.insert_resource(HeightmapsResource::new(world_size, seed));
+        noise_scale: 0.1,
+        noise_amplitude: 10.0,
+    };
+    commands.insert_resource(world_settings);
+    commands.insert_resource(HeightmapsResource::new(world_settings));
 }
 
 fn setup(

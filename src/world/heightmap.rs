@@ -3,9 +3,9 @@ use bevy::{
     ecs::system::Resource,
     math::{UVec2, Vec2, Vec3, Vec3Swizzles},
 };
+use bevy_easings::Lerp;
 use noise::{NoiseFn, Perlin};
 use std::ops::{Index, IndexMut};
-use bevy_easings::Lerp;
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, ChunkPosition, TilePosition, TilePosition2D},
@@ -13,10 +13,7 @@ use crate::{
     math_utils::{unnormalized_normal_array, Mean, RoundBy},
 };
 
-use super::WorldSize;
-
-const NOISE_SCALE: f64 = 0.025;
-const NOISE_AMPLITUDE: f64 = 20.0;
+use super::{WorldSettings, WorldSize};
 
 #[derive(Resource, Clone)]
 pub struct HeightmapsResource {
@@ -24,7 +21,8 @@ pub struct HeightmapsResource {
     dirty_chunks: Array2D<bool>,
 }
 impl HeightmapsResource {
-    pub fn new(world_size: WorldSize, seed: u32) -> Self {
+    pub fn new(world_settings: WorldSettings) -> Self {
+        let world_size = world_settings.world_size;
         let mut heightmaps = Array2D::filled_with(
             Heightmap::default(),
             world_size[0] as usize,
@@ -33,7 +31,7 @@ impl HeightmapsResource {
         for x in 0..world_size[0] {
             for y in 0..world_size[1] {
                 heightmaps[(x as usize, y as usize)] = generate_heightmap(
-                    seed,
+                    world_settings,
                     ChunkPosition {
                         position: UVec2::new(x as u32, y as u32),
                     },
@@ -243,14 +241,17 @@ impl Heightmap {
     }
     fn get_from_world_position(&self, position: Vec3) -> Vec3 {
         let tile_position = TilePosition::from_world_position(position);
-        let normalized_world_position = position.xz().fract().abs() + f32::EPSILON;
+        //let normalized_world_position = Vec2::new(position.x.round_by(0.1), position.z.round_by(0.1));
+        let normalized_world_position = position.xz().fract().abs();
+        //let normalized_world_position = position.xz().abs() - position.xz().floor().abs();
         let heights = self[tile_position.to_relative_tile_position()];
         //Bilinear Interpolation to get the height
         //Not sure that this is actually correct, but visually I can't tell
         let x_1 = &[heights[0]].lerp(&[heights[1]], &normalized_world_position.x);
         let x_2 = &[heights[3]].lerp(&[heights[2]], &normalized_world_position.x);
         let y = x_1.lerp(x_2, &normalized_world_position.y);
-        Vec3::new(position.x, y[0], position.z)
+        let pos = Vec3::new(position.x, y[0], position.z);
+        pos
     }
 }
 impl Default for Heightmap {
@@ -296,8 +297,8 @@ impl IndexMut<TilePosition> for Heightmap {
     }
 }
 
-pub fn generate_heightmap(seed: u32, position: ChunkPosition) -> Heightmap {
-    let perlin = Perlin::new(seed);
+pub fn generate_heightmap(world_settings: WorldSettings, position: ChunkPosition) -> Heightmap {
+    let perlin = Perlin::new(world_settings.seed);
     let mut heightmap = Heightmap::new();
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
@@ -305,21 +306,22 @@ pub fn generate_heightmap(seed: u32, position: ChunkPosition) -> Heightmap {
             let chunk_y = (position.position.y * CHUNK_SIZE) as f64;
             let x = x as f64;
             let y = y as f64;
-            let top_left = normalize_noise(
-                perlin.get([(chunk_x + x) * NOISE_SCALE, (chunk_y + y) * NOISE_SCALE]),
-            ) * NOISE_AMPLITUDE;
+            let top_left = normalize_noise(perlin.get([
+                (chunk_x + x) * world_settings.noise_scale,
+                (chunk_y + y) * world_settings.noise_scale,
+            ])) * world_settings.noise_amplitude;
             let top_right = normalize_noise(perlin.get([
-                (chunk_x + x + TILE_SIZE as f64) * NOISE_SCALE,
-                (chunk_y + y) * NOISE_SCALE,
-            ])) * NOISE_AMPLITUDE;
+                (chunk_x + x + TILE_SIZE as f64) * world_settings.noise_scale,
+                (chunk_y + y) * world_settings.noise_scale,
+            ])) * world_settings.noise_amplitude;
             let bottom_left = normalize_noise(perlin.get([
-                (chunk_x + x) * NOISE_SCALE,
-                (chunk_y + y + TILE_SIZE as f64) * NOISE_SCALE,
-            ])) * NOISE_AMPLITUDE;
+                (chunk_x + x) * world_settings.noise_scale,
+                (chunk_y + y + TILE_SIZE as f64) * world_settings.noise_scale,
+            ])) * world_settings.noise_amplitude;
             let bottom_right = normalize_noise(perlin.get([
-                (chunk_x + x + TILE_SIZE as f64) * NOISE_SCALE,
-                (chunk_y + y + TILE_SIZE as f64) * NOISE_SCALE,
-            ])) * NOISE_AMPLITUDE;
+                (chunk_x + x + TILE_SIZE as f64) * world_settings.noise_scale,
+                (chunk_y + y + TILE_SIZE as f64) * world_settings.noise_scale,
+            ])) * world_settings.noise_amplitude;
 
             let heights = [
                 (top_left as f32).round_by(HEIGHT_STEP),

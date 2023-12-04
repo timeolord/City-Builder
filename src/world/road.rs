@@ -162,7 +162,7 @@ impl Road {
     pub fn subdivisions(&self) -> usize {
         let road_length = self.length().round() as usize;
         let subdivisions = road_length * TILE_SIZE as usize;
-        subdivisions
+        subdivisions * 2
     }
     pub fn tiles(&self) -> &Vec<(TilePosition, RoadTile)> {
         &self
@@ -207,7 +207,7 @@ impl Road {
         self.bezier_curve
             .iter_positions(subdivision)
             .zip_eq(self.normal_vectors_with_subdivisions(subdivision))
-            .map(move |(p, normal)| p + (normal * horizontal_offset))
+            .map(move |(p, normal)| Vec2::new(p.x.round_by(0.1), p.y.round_by(0.1)) + (normal * horizontal_offset))
     }
     fn calculate_road_tiles(&mut self) {
         let mut road_tiles: Vec<(TilePosition, RoadTile)> = Vec::new();
@@ -251,6 +251,7 @@ impl Road {
             | CardinalDirection::South
             | CardinalDirection::East
             | CardinalDirection::West => self.length().round() as usize,
+            //Subdivide the diagonal roads by the length of the hypotenuse so that each segment is extactly one tile
             CardinalDirection::NorthEast
             | CardinalDirection::SouthWest
             | CardinalDirection::NorthWest
@@ -429,21 +430,6 @@ fn spawn_road_event_handler(
         }
         //Flatten road tiles along each row
         let mut tiles_to_change = Vec::new();
-        //Make sure that the last row is included since we step by 2
-        //let row_tiles = match road.row_tiles().len() {
-        //    //Sepcial case if length == 2
-        //    2 => road.row_tiles(),
-        //    even if even % 2 == 0 => road.row_tiles().into_iter().step_by(1).collect_vec(),
-        //    odd if odd % 2 == 1 => road
-        //        .row_tiles()
-        //        .into_iter()
-        //        .step_by(1)
-        //        .chain(road.row_tiles().into_iter().last())
-        //        .collect_vec(),
-        //    _ => {
-        //        unreachable!()
-        //    }
-        //};
         for row in road.row_tiles() {
             let average_tile = row
                 .iter()

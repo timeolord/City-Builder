@@ -363,6 +363,15 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
     let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
 
+    //println!("{:?}", road.as_world_positions(heightmaps, height_offset, -road_width).collect_vec());
+    //let left_spline_ = road.as_world_positions(heightmaps, height_offset, -road_width).collect_vec();
+    //for (a, b, c) in left_spline_.into_iter().tuple_windows::<(_, _, _)>() {
+    //    if (a.y - b.y).abs() > 0.2 && (b.y - c.y).abs() > 0.2 && (a.y - c.y).abs() < 0.2 {
+    //        println!("{:?} {:?} {:?}", a, b, c);
+    //    }
+    //}
+
+
     let vertices = left_spline
         .tuple_windows::<(_, _)>()
         .zip_eq(right_spline.tuple_windows::<(_, _)>())
