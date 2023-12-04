@@ -207,6 +207,7 @@ impl Road {
         self.bezier_curve
             .iter_positions(subdivision)
             .zip_eq(self.normal_vectors_with_subdivisions(subdivision))
+            //We round here to prevent floating point errors from screwing us over later. Like 0.9999999999999999 instead of 1.0
             .map(move |(p, normal)| Vec2::new(p.x.round_by(0.1), p.y.round_by(0.1)) + (normal * horizontal_offset))
     }
     fn calculate_road_tiles(&mut self) {
@@ -319,7 +320,6 @@ fn highlight_road_segments(
 }
 
 fn road_tool(
-    mut commands: Commands,
     current_tile: Res<CurrentTile>,
     mut spawn_road_events: EventWriter<SpawnRoadEvent>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
@@ -410,7 +410,6 @@ fn spawn_road_event_handler(
     mut spawn_road_events: EventReader<SpawnRoadEvent>,
     mut occupied_road_tiles: ResMut<RoadTilesResource>,
     mut road_intersections: ResMut<RoadIntersections>,
-    mut tile_highlight: EventWriter<HighlightTileEvent>,
 ) {
     for spawn_road_event in spawn_road_events.read() {
         let road = &spawn_road_event.road;

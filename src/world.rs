@@ -73,7 +73,7 @@ fn init(mut commands: Commands) {
         world_size,
         seed,
         grid_visibility: Visibility::Visible,
-        noise_scale: 0.1,
+        noise_scale: 0.01,
         noise_amplitude: 10.0,
     };
     commands.insert_resource(world_settings);

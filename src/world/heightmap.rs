@@ -241,9 +241,7 @@ impl Heightmap {
     }
     fn get_from_world_position(&self, position: Vec3) -> Vec3 {
         let tile_position = TilePosition::from_world_position(position);
-        //let normalized_world_position = Vec2::new(position.x.round_by(0.1), position.z.round_by(0.1));
         let normalized_world_position = position.xz().fract().abs();
-        //let normalized_world_position = position.xz().abs() - position.xz().floor().abs();
         let heights = self[tile_position.to_relative_tile_position()];
         //Bilinear Interpolation to get the height
         //Not sure that this is actually correct, but visually I can't tell
