@@ -10,11 +10,7 @@ use smooth_bevy_cameras::{
     LookTransform, LookTransformPlugin,
 };
 
-use crate::{
-    constants::DEBUG,
-    world::heightmap::HeightmapsResource,
-    GameState,
-};
+use crate::{constants::DEBUG, world::heightmap::HeightmapsResource, GameState};
 
 use super::cursor::RaycastSet;
 
@@ -50,18 +46,13 @@ pub fn input(
 ) {
     //Modified from smooth_bevy_cameras
     // Can only control one camera at a time.
-    let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
-        controller
-    } else {
+    let Some(controller) = controllers.iter().find(|c| c.enabled) else {
         return;
     };
 
-    let (mut transform, _) =
-        if let Some((_, transform, scene_transform)) = cameras.iter_mut().find(|c| c.0.enabled) {
-            (transform, scene_transform)
-        } else {
-            return;
-        };
+    let Some((_, mut transform, _)) = cameras.iter_mut().find(|c| c.0.enabled) else {
+        return;
+    };
 
     let OrbitCameraController {
         mouse_rotate_sensitivity,

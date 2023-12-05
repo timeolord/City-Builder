@@ -30,16 +30,13 @@ fn tile_editor_tool(
 ) {
     if mouse_button.just_pressed(MouseButton::Left) {
         let current_tile = current_tile.position;
-        match tool_resource.tool_type {
-            ToolType::TileEditor => {
-                let tile_heights = heightmaps[current_tile];
-                let average_height = tile_heights.into_iter().mean_f32();
-                let new_heights = vec![(average_height + tool_resource.tool_strength).floor(); 4]
-                    .try_into()
-                    .unwrap();
-                heightmaps.edit_tile(current_tile, new_heights);
-            }
-            _ => {}
+        if tool_resource.tool_type == ToolType::TileEditor {
+            let tile_heights = heightmaps[current_tile];
+            let average_height = tile_heights.into_iter().mean_f32();
+            let new_heights = vec![(average_height + tool_resource.tool_strength).floor(); 4]
+                .try_into()
+                .unwrap();
+            heightmaps.edit_tile(current_tile, new_heights);
         }
     }
 }

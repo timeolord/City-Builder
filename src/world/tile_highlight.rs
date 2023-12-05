@@ -49,5 +49,5 @@ fn tile_highlight_handler(
         position.y = height.into_iter().reduce(f32::max).unwrap_or(0.0);
         gizmos.sphere(position, Quat::IDENTITY, 0.5, event.color);
     }
-    permanent_events.extend(temp_events.into_iter());
+    permanent_events.extend(temp_events);
 }

@@ -1,9 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{
-    chunk::chunk_tile_position::TilePosition,
-    GameState,
-};
+use crate::{chunk::chunk_tile_position::TilePosition, GameState};
 
 use super::{
     buildings::ResidentialBuilding,
@@ -91,15 +88,13 @@ fn move_vehicle(
     heightmaps: Res<HeightmapsResource>,
 ) {
     for (entity, speed, mut goals, mut pathfind, mut tile_position, mut transform) in
-        vehicle_query.iter_mut()
+        &mut vehicle_query
     {
         //Check if the car has reached the end of the path and if so, complete the current goal
-        if TilePosition::from_position_2d(
-            *pathfind.path.last().expect("Path should not be empty"),
-        )
-        .to_world_position()
-        .xz()
-        .abs_diff_eq(transform.translation.xz(), speed.speed * 2.0)
+        if TilePosition::from_position_2d(*pathfind.path.last().expect("Path should not be empty"))
+            .to_world_position()
+            .xz()
+            .abs_diff_eq(transform.translation.xz(), speed.speed * 2.0)
         {
             commands.entity(entity).insert(VehicleCompletedGoal {
                 goal: goals.goals.pop().expect("Goals should not be empty"),
@@ -150,8 +145,7 @@ fn vehicle_complete_goal_handler(
         ),
     >,
 ) {
-    for (vehicle_entity, mut goals, mut pathfind, mut inventory, completed_goal) in
-        vehicle_query.iter_mut()
+    for (vehicle_entity, _goals, mut pathfind, mut inventory, completed_goal) in &mut vehicle_query
     {
         match completed_goal.goal {
             VehicleGoal::Shopping { entity: _ } => {

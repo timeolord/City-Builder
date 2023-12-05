@@ -33,7 +33,7 @@ impl HeightmapsResource {
                 heightmaps[(x as usize, y as usize)] = generate_heightmap(
                     world_settings,
                     ChunkPosition {
-                        position: UVec2::new(x as u32, y as u32),
+                        position: UVec2::new(x, y),
                     },
                 );
             }
@@ -56,7 +56,7 @@ impl HeightmapsResource {
             .get_from_world_position(position)
     }
     pub fn edit_tile(&mut self, position: TilePosition, heights: HeightmapVertex) {
-        self.edit_tiles(vec![position], vec![heights])
+        self.edit_tiles(vec![position], vec![heights]);
     }
     pub fn edit_tiles(&mut self, positions: Vec<TilePosition>, heights: Vec<HeightmapVertex>) {
         for (position, heights) in positions.iter().zip(heights.into_iter()) {
@@ -112,9 +112,9 @@ impl HeightmapsResource {
                 }
             }
         }
-        dirty_chunks.iter().for_each(|chunk| {
+        for chunk in &dirty_chunks {
             self.dirty_chunks[chunk.as_tuple()] = false;
-        });
+        }
         dirty_chunks.into_iter()
     }
 }
@@ -294,8 +294,8 @@ impl Heightmap {
         let x_1 = &[heights[0]].lerp(&[heights[1]], &normalized_world_position.x);
         let x_2 = &[heights[3]].lerp(&[heights[2]], &normalized_world_position.x);
         let y = x_1.lerp(x_2, &normalized_world_position.y);
-        let pos = Vec3::new(position.x, y[0], position.z);
-        pos
+        
+        Vec3::new(position.x, y[0], position.z)
     }
 }
 impl Default for Heightmap {
@@ -346,25 +346,25 @@ pub fn generate_heightmap(world_settings: WorldSettings, position: ChunkPosition
     let mut heightmap = Heightmap::new();
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
-            let chunk_x = (position.position.x * CHUNK_SIZE) as f64;
-            let chunk_y = (position.position.y * CHUNK_SIZE) as f64;
-            let x = x as f64;
-            let y = y as f64;
+            let chunk_x = f64::from(position.position.x * CHUNK_SIZE);
+            let chunk_y = f64::from(position.position.y * CHUNK_SIZE);
+            let x = f64::from(x);
+            let y = f64::from(y);
             let top_left = normalize_noise(perlin.get([
                 (chunk_x + x) * world_settings.noise_scale,
                 (chunk_y + y) * world_settings.noise_scale,
             ])) * world_settings.noise_amplitude;
             let top_right = normalize_noise(perlin.get([
-                (chunk_x + x + TILE_SIZE as f64) * world_settings.noise_scale,
+                (chunk_x + x + f64::from(TILE_SIZE)) * world_settings.noise_scale,
                 (chunk_y + y) * world_settings.noise_scale,
             ])) * world_settings.noise_amplitude;
             let bottom_left = normalize_noise(perlin.get([
                 (chunk_x + x) * world_settings.noise_scale,
-                (chunk_y + y + TILE_SIZE as f64) * world_settings.noise_scale,
+                (chunk_y + y + f64::from(TILE_SIZE)) * world_settings.noise_scale,
             ])) * world_settings.noise_amplitude;
             let bottom_right = normalize_noise(perlin.get([
-                (chunk_x + x + TILE_SIZE as f64) * world_settings.noise_scale,
-                (chunk_y + y + TILE_SIZE as f64) * world_settings.noise_scale,
+                (chunk_x + x + f64::from(TILE_SIZE)) * world_settings.noise_scale,
+                (chunk_y + y + f64::from(TILE_SIZE)) * world_settings.noise_scale,
             ])) * world_settings.noise_amplitude;
 
             let heights = [

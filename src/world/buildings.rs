@@ -3,10 +3,7 @@ use std::collections::HashSet;
 use bevy::prelude::*;
 
 use crate::{
-    chunk::chunk_tile_position::TilePosition,
-    constants::DEBUG,
-    cursor::CurrentTile,
-    GameState,
+    chunk::chunk_tile_position::TilePosition, constants::DEBUG, cursor::CurrentTile, GameState,
 };
 
 use super::{
@@ -45,17 +42,11 @@ pub struct CommercialBuilding;
 //pub struct BuildingType<T: BuildingTypeTrait> {
 //    pub building_type: T,
 //}
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct OccupiedBuildingTiles {
     pub tiles: HashSet<TilePosition>,
 }
-impl Default for OccupiedBuildingTiles {
-    fn default() -> Self {
-        OccupiedBuildingTiles {
-            tiles: HashSet::new(),
-        }
-    }
-}
+
 #[derive(Component)]
 pub struct BuildingPosition {
     pub position: TilePosition,
@@ -113,7 +104,7 @@ fn residential_shopping(
         return;
     }
     for (building_entity, _, residential_building, mut inventory) in
-        residential_buildings_query.iter_mut()
+        &mut residential_buildings_query
     {
         let population = &mut inventory.inventory[InventoryType::People];
         if population.current == 0 {
@@ -184,14 +175,12 @@ fn building_tool(
                 let mut starting_point_y0 = current_tile.position;
                 starting_point_y0.position.y = 0;
 
-                match find_entrance_tile(starting_point_y0, &occupied_road_tiles) {
-                    Some(_) => {}
-                    None => {
-                        if DEBUG {
-                            println!("No entrance found at {:?}", current_tile.position);
-                        }
-                        return;
+                if find_entrance_tile(starting_point_y0, &occupied_road_tiles).is_some() {
+                } else {
+                    if DEBUG {
+                        println!("No entrance found at {:?}", current_tile.position);
                     }
+                    return;
                 }
                 if occupied_road_tiles.tiles.contains_key(&starting_point_y0) {
                     if DEBUG {
@@ -212,7 +201,7 @@ fn building_tool(
 
                 let mesh = Mesh::from(shape::Cube { size: 1.0 });
                 let transform = Transform::from_translation(
-                    starting_point_y0.to_world_position_with_height(&heightmap),
+                    starting_point_y0.to_world_position_with_height(heightmap),
                 );
 
                 let mut material: StandardMaterial = match current_tool.tool_type {
@@ -235,16 +224,16 @@ fn building_tool(
                 material.perceptual_roughness = 1.0;
                 material.reflectance = 0.0;
 
-                let mesh_handle = mesh_assets.add(mesh.into());
+                let mesh_handle = mesh_assets.add(mesh);
                 let building_bundle = BuildingBundle {
                     position: BuildingPosition {
                         position: starting_point_y0,
                     },
                     entrance: BuildingEntrance {
                         position: find_entrance_tile(starting_point_y0, &occupied_road_tiles)
-                            .expect(
-                                format!("No entrance found for {:?}", starting_point_y0).as_str(),
-                            ),
+                            .unwrap_or_else(|| {
+                                panic!("No entrance found for {starting_point_y0:?}")
+                            }),
                     },
                     pbr: PbrBundle {
                         mesh: mesh_handle.clone(),
@@ -275,10 +264,8 @@ fn find_entrance_tile(
     occupied_road_tiles: &RoadTilesResource,
 ) -> Option<TilePosition> {
     let neighbours = building_position.tile_neighbours();
-    for (_, neighbour) in neighbours {
-        if occupied_road_tiles.tiles.contains_key(&neighbour) {
-            return Some(neighbour);
-        }
-    }
-    None
+    neighbours
+        .into_iter()
+        .map(|(_, neighbour)| neighbour)
+        .find(|&neighbour| occupied_road_tiles.tiles.contains_key(&neighbour))
 }

@@ -1,8 +1,11 @@
-use std::{ops::{Add, Neg, Sub}, f32::consts::PI};
+use std::{
+    f32::consts::PI,
+    ops::{Add, Neg, Sub},
+};
 
 use bevy::{
     ecs::component::Component,
-    math::{IVec2, IVec3, UVec2, Vec3Swizzles, Vec2},
+    math::{IVec2, IVec3, UVec2, Vec2, Vec3Swizzles},
     prelude::Vec3,
 };
 use enum_map::{Enum, EnumMap};
@@ -11,7 +14,7 @@ use num_traits::AsPrimitive;
 use crate::{
     constants::{CHUNK_SIZE, TILE_SIZE},
     math_utils::Mean,
-    world::heightmap::Heightmap,
+    world::{heightmap::Heightmap, WorldSize},
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -25,7 +28,11 @@ impl ChunkPosition {
     pub fn from_world_position(world_position: Vec3) -> ChunkPosition {
         TilePosition::from_world_position(world_position).chunk_position()
     }
-    pub fn as_tuple<T>(&self) -> (T, T) where u32: AsPrimitive<T>, T: Copy + 'static{
+    pub fn as_tuple<T>(self) -> (T, T)
+    where
+        u32: AsPrimitive<T>,
+        T: Copy + 'static,
+    {
         (self.position.x.as_(), self.position.y.as_())
     }
 }
@@ -55,14 +62,14 @@ impl TilePosition {
         }
         neighbours
     }
-    pub fn non_diagonal_tile_neighbours(&self) -> Neighbours<TilePosition> {
+    pub fn non_diagonal_tile_neighbours(self) -> Neighbours<TilePosition> {
         let mut neighbours = Neighbours::default();
-        for direction in CardinalDirection::non_compound_directions().into_iter() {
-            neighbours[direction] = *self + direction;
+        for direction in CardinalDirection::non_compound_directions() {
+            neighbours[direction] = self + direction;
         }
         neighbours
     }
-    pub fn to_world_position(&self) -> Vec3 {
+    pub fn to_world_position(self) -> Vec3 {
         let mut world_position = Vec3::new(
             self.position.x as f32 * TILE_SIZE,
             self.position.y as f32 * TILE_SIZE,
@@ -72,7 +79,7 @@ impl TilePosition {
         world_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
-    pub fn to_world_position_2d(&self) -> Vec2 {
+    pub fn to_world_position_2d(self) -> Vec2 {
         let mut world_position = Vec2::new(
             self.position.x as f32 * TILE_SIZE,
             self.position.z as f32 * TILE_SIZE,
@@ -81,10 +88,10 @@ impl TilePosition {
         world_position.y -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
-    pub fn to_world_position_with_height(&self, heightmap: &Heightmap) -> Vec3 {
+    pub fn to_world_position_with_height(self, heightmap: &Heightmap) -> Vec3 {
         let mut world_position = Vec3::new(
             self.chunk_position().position.x as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
-            heightmap[*self].into_iter().mean_f32(),
+            heightmap[self].into_iter().mean_f32(),
             self.chunk_position().position.y as f32 * CHUNK_SIZE as f32 * TILE_SIZE,
         );
         world_position.x += self.position.x as f32 * TILE_SIZE;
@@ -94,7 +101,7 @@ impl TilePosition {
         world_position.z -= ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         world_position
     }
-    pub fn chunk_neighbours(&self) -> Neighbours<ChunkPosition> {
+    pub fn chunk_neighbours(self) -> Neighbours<ChunkPosition> {
         let mut neighbours = Neighbours::default();
         for direction in CardinalDirection::iter() {
             neighbours[direction] = self.chunk_position() + direction;
@@ -114,128 +121,117 @@ impl TilePosition {
             position: position.as_ivec3(),
         }
     }
-    pub fn to_relative_tile_position(&self) -> TilePosition {
+    pub fn to_relative_tile_position(self) -> TilePosition {
         let mut position = self.position;
         position.x -= self.chunk_position().position.x as i32 * CHUNK_SIZE as i32;
         position.z -= self.chunk_position().position.y as i32 * CHUNK_SIZE as i32;
         TilePosition { position }
     }
-    //pub fn from_world_position(world_position: Vec3) -> TilePosition {
-    //    let mut position = Self::world_position_to_tile_position(world_position);
-    //    let chunk_position = [
-    //        ((position.x as f32 / CHUNK_SIZE as f32).floor()) as i32,
-    //        ((position.z as f32 / CHUNK_SIZE as f32).floor()) as i32,
-    //    ];
-    //    position.x -= (chunk_position.x) * CHUNK_SIZE as i32;
-    //    position.z -= (chunk_position[1]) * CHUNK_SIZE as i32;
-    //    TilePosition { position }
-    //}
     pub fn from_position_2d(position: TilePosition2D) -> TilePosition {
         TilePosition {
             position: IVec3::new(position.x, 0, position.y),
         }
     }
-    //pub fn clamp_to_world(&self, world_size: WorldSize) -> TilePosition {
-    //    let min_values = IVec3::new(0, i32::MIN, 0);
-    //    let max_values = IVec3::new(
-    //        world_size[0] as i32 * CHUNK_SIZE as i32 - 1,
-    //        i32::MAX,
-    //        world_size[1] as i32 * CHUNK_SIZE as i32 - 1,
-    //    );
-    //    TilePosition {
-    //        position: self.position.clamp(min_values, max_values),
-    //    }
-    //}
-    pub fn snap_to_straight_line(
-    &self,
-    current_position: TilePosition,
-) -> TilePosition {
-    let starting_vec = self.position_2d();
-    let current_vec = current_position.position_2d();
-    let relative_vec = current_vec - starting_vec;
-    let length = (relative_vec.distance_squared(IVec2::ZERO) as f32)
-        .sqrt()
-        .round()
-        .abs() as i32;
-    let angle = (relative_vec.y as f32).atan2(relative_vec.x as f32) * 180.0 / PI;
-    let result_position = if angle.abs() == 0.0
-        || angle.abs() == 45.0
-        || angle.abs() == 90.0
-        || angle.abs() == 135.0
-        || angle.abs() == 180.0
-    {
-        current_position
-    } else {
-        let quadrant = angle / 45.0;
-        match quadrant.round() as i32 {
-            0 => {
-                let directional_vec = IVec2::X;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+    pub fn clamp_to_world(&self, world_size: WorldSize) -> TilePosition {
+        let mut position = self.position;
+        position.x = position
+            .x
+            .clamp(0, world_size[0] as i32 - CHUNK_SIZE as i32);
+        position.z = position
+            .z
+            .clamp(0, world_size[1] as i32 - CHUNK_SIZE as i32);
+        TilePosition { position }
+    }
+    pub fn snap_to_straight_line(&self, current_position: TilePosition) -> TilePosition {
+        let starting_vec = self.position_2d();
+        let current_vec = current_position.position_2d();
+        let relative_vec = current_vec - starting_vec;
+        let length = (relative_vec.distance_squared(IVec2::ZERO) as f32)
+            .sqrt()
+            .round()
+            .abs() as i32;
+        let angle = (relative_vec.y as f32).atan2(relative_vec.x as f32) * 180.0 / PI;
+
+        if angle.abs() as i32 == 0
+            || angle.abs() as i32 == 45
+            || angle.abs() as i32 == 90
+            || angle.abs() as i32 == 135
+            || angle.abs() as i32 == 180
+        {
+            current_position
+        } else {
+            let quadrant = angle / 45.0;
+            match quadrant.round() as i32 {
+                0 => {
+                    let directional_vec = IVec2::X;
+                    let tile_vec = directional_vec * length + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            1 => {
-                let vec_values = (45f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                1 => {
+                    let vec_values = (45f32 * PI / 180.0).sin_cos();
+                    let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                    let tile_vec =
+                        (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            2 => {
-                let directional_vec = IVec2::Y;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                2 => {
+                    let directional_vec = IVec2::Y;
+                    let tile_vec = directional_vec * length + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            3 => {
-                let vec_values = (135f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                3 => {
+                    let vec_values = (135f32 * PI / 180.0).sin_cos();
+                    let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                    let tile_vec =
+                        (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            4 | -4 => {
-                let directional_vec = IVec2::X * -1;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                4 | -4 => {
+                    let directional_vec = IVec2::X * -1;
+                    let tile_vec = directional_vec * length + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            -1 => {
-                let vec_values = (315f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                -1 => {
+                    let vec_values = (315f32 * PI / 180.0).sin_cos();
+                    let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                    let tile_vec =
+                        (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            -2 => {
-                let directional_vec = IVec2::Y * -1;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                -2 => {
+                    let directional_vec = IVec2::Y * -1;
+                    let tile_vec = directional_vec * length + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            -3 => {
-                let vec_values = (225f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                -3 => {
+                    let vec_values = (225f32 * PI / 180.0).sin_cos();
+                    let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                    let tile_vec =
+                        (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                    TilePosition {
+                        position: IVec3::new(tile_vec.x, 0, tile_vec.y),
+                    }
                 }
-            }
-            _ => {
-                panic!("Unexpected quadrant: {}", quadrant);
+                _ => {
+                    panic!("Unexpected quadrant: {quadrant}");
+                }
             }
         }
-    };
-    result_position
-}
-
+    }
 }
 impl Add<CardinalDirection> for TilePosition {
     type Output = TilePosition;
@@ -339,15 +335,16 @@ pub enum CardinalDirection {
     NorthWest = 7,
 }
 impl CardinalDirection {
-    pub fn non_compound_directions() -> impl Iterator<Item=CardinalDirection> {
+    pub fn non_compound_directions() -> impl Iterator<Item = CardinalDirection> {
         [
             CardinalDirection::North,
             CardinalDirection::East,
             CardinalDirection::South,
             CardinalDirection::West,
-        ].into_iter()
+        ]
+        .into_iter()
     }
-    pub fn split_direction(&self) -> [CardinalDirection; 2] {
+    pub fn split_direction(self) -> [CardinalDirection; 2] {
         match self {
             CardinalDirection::North => {
                 [CardinalDirection::NorthWest, CardinalDirection::NorthEast]
@@ -363,7 +360,7 @@ impl CardinalDirection {
             CardinalDirection::NorthWest => [CardinalDirection::West, CardinalDirection::North],
         }
     }
-    pub fn next_clockwise(&self) -> CardinalDirection {
+    pub fn next_clockwise(self) -> CardinalDirection {
         match self {
             CardinalDirection::North => CardinalDirection::NorthEast,
             CardinalDirection::NorthEast => CardinalDirection::East,
@@ -375,7 +372,7 @@ impl CardinalDirection {
             CardinalDirection::NorthWest => CardinalDirection::North,
         }
     }
-    pub fn next_counter_clockwise(&self) -> CardinalDirection {
+    pub fn next_counter_clockwise(self) -> CardinalDirection {
         match self {
             CardinalDirection::North => CardinalDirection::NorthWest,
             CardinalDirection::NorthEast => CardinalDirection::North,
@@ -387,7 +384,7 @@ impl CardinalDirection {
             CardinalDirection::NorthWest => CardinalDirection::West,
         }
     }
-    pub fn to_angle(&self) -> f32 {
+    pub fn to_angle(self) -> f32 {
         match self {
             CardinalDirection::North => 0.0,
             CardinalDirection::NorthEast => 45.0,

@@ -111,7 +111,7 @@ fn setup(
         brightness: 0.2,
     });
 
-    let world_size = world_settings.world_size.clone();
+    let world_size = world_settings.world_size;
     for x in 0..world_size[0] {
         for y in 0..world_size[1] {
             spawn_chunk_event.send(SpawnChunkEvent {
@@ -134,7 +134,7 @@ fn toggle_grid(
             Visibility::Hidden => Visibility::Visible,
             Visibility::Inherited => Visibility::Inherited,
         };
-        for mut visible in query.iter_mut() {
+        for mut visible in &mut query {
             *visible = grid_visible.grid_visibility;
         }
     }

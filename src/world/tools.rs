@@ -29,15 +29,15 @@ fn exit(mut commands: Commands) {
 fn tool_select(keyboard: Res<Input<KeyCode>>, mut tool_resource: ResMut<CurrentTool>) {
     if keyboard.just_pressed(KeyCode::T) {
         tool_resource.tool_type = tool_resource.tool_type.next_tool();
-        println!("Current Tool: {:?}", tool_resource.tool_type)
+        println!("Current Tool: {:?}", tool_resource.tool_type);
     }
     if keyboard.just_pressed(KeyCode::O) {
         tool_resource.tool_strength += tool_resource.tool_increase_amount;
-        println!("Tool Strength: {}", tool_resource.tool_strength)
+        println!("Tool Strength: {}", tool_resource.tool_strength);
     }
     if keyboard.just_pressed(KeyCode::L) {
         tool_resource.tool_strength -= tool_resource.tool_increase_amount;
-        println!("Tool Strength: {}", tool_resource.tool_strength)
+        println!("Tool Strength: {}", tool_resource.tool_strength);
     }
 }
 

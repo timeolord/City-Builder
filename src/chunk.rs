@@ -49,7 +49,7 @@ pub struct DespawnEntityEvent {
 
 fn setup(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
+    _meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mut material: StandardMaterial = Color::rgb(0.3, 0.5, 0.3).into();
@@ -61,7 +61,7 @@ fn setup(
     commands.insert_resource(ChunkResource {
         plane_material,
         grid_material,
-    })
+    });
 }
 
 #[derive(Component)]
@@ -95,6 +95,7 @@ fn despawn_entity_event_handler(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_chunk_event_handler(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -109,25 +110,22 @@ fn spawn_chunk_event_handler(
         let current_chunk_id: Option<(Entity, &ChunkPosition)> = chunks
             .iter()
             .find(|(_, chunk)| **chunk == spawn_chunk_event.position);
-        match current_chunk_id {
-            Some((current_chunk_id, _)) => {
-                despawn_entity_events.send(DespawnEntityEvent {
-                    entity: current_chunk_id,
-                });
-            }
-            None => {}
+        if let Some((current_chunk_id, _)) = current_chunk_id {
+            despawn_entity_events.send(DespawnEntityEvent {
+                entity: current_chunk_id,
+            });
         }
         let heightmap = &heightmaps[spawn_chunk_event.position];
         let starting_position = spawn_chunk_event.position;
 
-        let mesh = meshes.add(create_chunk_mesh(&heightmap));
+        let mesh = meshes.add(create_chunk_mesh(heightmap));
         let material = chunk_resources.plane_material.clone();
         let grid_material = chunk_resources.grid_material.clone();
-        let grid_mesh = meshes.add(create_grid_mesh(&heightmap));
+        let grid_mesh = meshes.add(create_grid_mesh(heightmap));
 
         let chunk_pbr = PbrBundle {
-            mesh: mesh,
-            material: material,
+            mesh,
+            material,
             transform: Transform::from_xyz(
                 (starting_position.position.x * CHUNK_SIZE) as f32,
                 0.0,

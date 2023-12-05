@@ -1,3 +1,12 @@
+#![allow(clippy::too_many_arguments)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::module_name_repetitions)]
+
 //! A simple 3D scene with light shining over a cube sitting on a plane.
 mod camera;
 mod chunk;

@@ -41,7 +41,7 @@ fn find_path_event_handler(
     occupied_road_tiles: Res<RoadTilesResource>,
     mut highlight_tile_events: EventWriter<HighlightTileEvent>,
 ) {
-    for (entity, pathfind) in pathfind_query.iter_mut() {
+    for (entity, pathfind) in &mut pathfind_query {
         let start = pathfind.start.position_2d();
         let end = pathfind.end.position_2d();
         let path: Option<(Path, Distance)> = pathfinding::prelude::dijkstra(
@@ -49,7 +49,6 @@ fn find_path_event_handler(
             |p| {
                 occupied_road_tiles
                     .get_neighbours(TilePosition::from_position_2d(*p))
-                    .into_iter()
                     .map(|p| (p.position_2d(), 1))
             },
             |p| *p == end,
@@ -57,7 +56,7 @@ fn find_path_event_handler(
 
         match path {
             Some((path, _distance)) => {
-                for position in path.iter() {
+                for position in &path {
                     highlight_tile_events.send(HighlightTileEvent {
                         position: TilePosition::from_position_2d(*position),
                         color: Color::GOLD,
@@ -75,7 +74,7 @@ fn find_path_event_handler(
             }
             None => {
                 if DEBUG {
-                    println!("No path found between {:?} and {:?}", start, end);
+                    println!("No path found between {start:?} and {end:?}");
                 }
             }
         }

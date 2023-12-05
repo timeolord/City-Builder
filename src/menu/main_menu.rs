@@ -127,15 +127,13 @@ fn input(
     for start_game in &mut asset_builder_query {
         match *start_game {
             Interaction::Pressed => game_state.set(GameState::AssetBuilder),
-            Interaction::Hovered => {}
-            Interaction::None => {}
+            Interaction::Hovered | Interaction::None => {}
         }
     }
     for start_game in &mut start_game_query {
         match *start_game {
             Interaction::Pressed => game_state.set(GameState::World),
-            Interaction::Hovered => {}
-            Interaction::None => {}
+            Interaction::Hovered | Interaction::None => {}
         }
     }
 }

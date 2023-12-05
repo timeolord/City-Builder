@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use enum_map::*;
+use enum_map::{Enum, EnumMap, usize};
 
 pub struct ResourcesPlugin;
 

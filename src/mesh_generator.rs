@@ -1,10 +1,9 @@
 use bevy::{
-    math::{IVec2, Mat3, Vec3, Vec4Swizzles},
+    math::{IVec2},
     render::{
-        mesh::{Indices, Mesh, VertexAttributeValues},
+        mesh::{Indices, Mesh},
         render_resource::PrimitiveTopology,
     },
-    transform::components::Transform,
 };
 use itertools::Itertools;
 
@@ -14,9 +13,11 @@ use crate::{
     math_utils::{normal_vector, unnormalized_normal_array},
     world::{
         heightmap::{Heightmap, HeightmapVertex, HeightmapsResource},
-        road::Road,
+        road::road_struct::Road,
     },
 };
+
+type MeshVecs = (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>);
 
 pub fn create_plane_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
     let tile_size = 0.5 * TILE_SIZE;
@@ -156,10 +157,7 @@ pub fn create_box_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
 }
 
 pub fn create_chunk_mesh(heightmap: &Heightmap) -> Mesh {
-    fn create_attributes(
-        starting_position: TilePosition2D,
-        heightmap: &Heightmap,
-    ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>) {
+    fn create_attributes(starting_position: TilePosition2D, heightmap: &Heightmap) -> MeshVecs {
         let chunk_offset = ((TILE_SIZE * CHUNK_SIZE as f32) - TILE_SIZE) / 2.0;
         let tile_size = 0.5 * TILE_SIZE;
         let heights = heightmap[starting_position];
@@ -194,8 +192,8 @@ pub fn create_chunk_mesh(heightmap: &Heightmap) -> Mesh {
         let indices = vec![
             indices_count + 2,
             indices_count + 1,
-            indices_count + 0,
-            indices_count + 0,
+            indices_count,
+            indices_count,
             indices_count + 3,
             indices_count + 2,
         ];
@@ -234,99 +232,6 @@ pub fn create_chunk_mesh(heightmap: &Heightmap) -> Mesh {
 }
 
 pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
-    fn create_attributes(
-        starting_position: TilePosition2D,
-        heightmap: &Heightmap,
-    ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) {
-        let heights = heightmap[starting_position];
-        let tile_size = 0.5 * TILE_SIZE;
-        let starting_position = starting_position.as_vec2();
-        let vertices = vec![
-            //Outside Square
-            [
-                starting_position.x - tile_size * TILE_SIZE,
-                heights[0] as f32,
-                starting_position.y - tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x + tile_size * TILE_SIZE,
-                heights[1] as f32,
-                starting_position.y - tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x + tile_size * TILE_SIZE,
-                heights[2] as f32,
-                starting_position.y + tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x - tile_size * TILE_SIZE,
-                heights[3] as f32,
-                starting_position.y + tile_size * TILE_SIZE,
-            ],
-            //Inside Square
-            [
-                starting_position.x - tile_size + GRID_THICKNESS,
-                heights[0] as f32,
-                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
-            ],
-            [
-                starting_position.x + tile_size - GRID_THICKNESS,
-                heights[1] as f32,
-                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
-            ],
-            [
-                starting_position.x + tile_size - GRID_THICKNESS,
-                heights[2] as f32,
-                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
-            ],
-            [
-                starting_position.x - tile_size + GRID_THICKNESS,
-                heights[3] as f32,
-                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
-            ],
-        ];
-        let uv = vec![
-            [-1.0, -1.0],
-            [1.0, -1.0],
-            [1.0, 1.0],
-            [-1.0, 1.0],
-            //Inside Square
-            [-1.0 + GRID_THICKNESS, -1.0 + GRID_THICKNESS],
-            [1.0 - GRID_THICKNESS, -1.0 + GRID_THICKNESS],
-            [1.0 - GRID_THICKNESS, 1.0 - GRID_THICKNESS],
-            [-1.0 + GRID_THICKNESS, 1.0 - GRID_THICKNESS],
-        ];
-        let indices_count =
-            ((starting_position.x + starting_position.y * CHUNK_SIZE as f32) * 8.0) as u32;
-        let indices = vec![
-            indices_count + 0,
-            indices_count + 4,
-            indices_count + 1,
-            indices_count + 1,
-            indices_count + 4,
-            indices_count + 5, //Top
-            indices_count + 1,
-            indices_count + 5,
-            indices_count + 2,
-            indices_count + 2,
-            indices_count + 5,
-            indices_count + 6, //Right
-            indices_count + 2,
-            indices_count + 6,
-            indices_count + 3,
-            indices_count + 3,
-            indices_count + 6,
-            indices_count + 7, //Bottom
-            indices_count + 3,
-            indices_count + 7,
-            indices_count + 0,
-            indices_count + 0,
-            indices_count + 7,
-            indices_count + 4, //Left
-        ];
-        (vertices, uv, indices)
-    }
-
     let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
 
     let mut vertices = Vec::new();
@@ -334,7 +239,7 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
     let mut indices = Vec::new();
     for x in 0..CHUNK_SIZE as i32 {
         for y in 0..CHUNK_SIZE as i32 {
-            let (new_vertices, uv, index) = create_attributes(
+            let (new_vertices, uv, index) = create_grid_attributes(
                 IVec2::new(x * TILE_SIZE as i32, y * TILE_SIZE as i32),
                 heightmap,
             );
@@ -356,10 +261,103 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
     grid_mesh
 }
 
+fn create_grid_attributes(
+        starting_position: TilePosition2D,
+        heightmap: &Heightmap,
+    ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) {
+        let heights = heightmap[starting_position];
+        let tile_size = 0.5 * TILE_SIZE;
+        let starting_position = starting_position.as_vec2();
+        let vertices = vec![
+            //Outside Square
+            [
+                starting_position.x - tile_size * TILE_SIZE,
+                heights[0],
+                starting_position.y - tile_size * TILE_SIZE,
+            ],
+            [
+                starting_position.x + tile_size * TILE_SIZE,
+                heights[1],
+                starting_position.y - tile_size * TILE_SIZE,
+            ],
+            [
+                starting_position.x + tile_size * TILE_SIZE,
+                heights[2],
+                starting_position.y + tile_size * TILE_SIZE,
+            ],
+            [
+                starting_position.x - tile_size * TILE_SIZE,
+                heights[3],
+                starting_position.y + tile_size * TILE_SIZE,
+            ],
+            //Inside Square
+            [
+                starting_position.x - tile_size + GRID_THICKNESS,
+                heights[0],
+                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
+            ],
+            [
+                starting_position.x + tile_size - GRID_THICKNESS,
+                heights[1],
+                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
+            ],
+            [
+                starting_position.x + tile_size - GRID_THICKNESS,
+                heights[2],
+                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
+            ],
+            [
+                starting_position.x - tile_size + GRID_THICKNESS,
+                heights[3],
+                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
+            ],
+        ];
+        let uv = vec![
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [1.0, 1.0],
+            [-1.0, 1.0],
+            //Inside Square
+            [-1.0 + GRID_THICKNESS, -1.0 + GRID_THICKNESS],
+            [1.0 - GRID_THICKNESS, -1.0 + GRID_THICKNESS],
+            [1.0 - GRID_THICKNESS, 1.0 - GRID_THICKNESS],
+            [-1.0 + GRID_THICKNESS, 1.0 - GRID_THICKNESS],
+        ];
+        let indices_count =
+            ((starting_position.x + starting_position.y * CHUNK_SIZE as f32) * 8.0) as u32;
+        let indices = vec![
+            indices_count,
+            indices_count + 4,
+            indices_count + 1,
+            indices_count + 1,
+            indices_count + 4,
+            indices_count + 5, //Top
+            indices_count + 1,
+            indices_count + 5,
+            indices_count + 2,
+            indices_count + 2,
+            indices_count + 5,
+            indices_count + 6, //Right
+            indices_count + 2,
+            indices_count + 6,
+            indices_count + 3,
+            indices_count + 3,
+            indices_count + 6,
+            indices_count + 7, //Bottom
+            indices_count + 3,
+            indices_count + 7,
+            indices_count,
+            indices_count,
+            indices_count + 7,
+            indices_count + 4, //Left
+        ];
+        (vertices, uv, indices)
+    }
+
 pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     let height_offset = 0.1;
 
-    let road_width = road.width / 2.0;
+    let road_width = road.width() / 2.0;
     let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
     let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
 
@@ -371,7 +369,6 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     //    }
     //}
 
-
     let vertices = left_spline
         .tuple_windows::<(_, _)>()
         .zip_eq(right_spline.tuple_windows::<(_, _)>())
@@ -380,27 +377,24 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
 
     let uvs: Vec<[f32; 2]> = vertices
         .iter()
-        .map(|[_, _, _, _]| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
-        .flatten()
+        .flat_map(|[_, _, _, _]| [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
         .collect_vec();
 
     let normals = vertices
         .iter()
-        .map(|[a, b, c, _]| {
+        .flat_map(|[a, b, c, _]| {
             let normal = normal_vector(*a, *b, *c).to_array();
             [normal, normal, normal, normal]
         })
-        .flatten()
         .collect_vec();
 
     let indices = vertices
         .iter()
         .enumerate()
-        .map(|(i, verts)| {
+        .flat_map(|(i, verts)| {
             let i = i as u32 * verts.len() as u32;
-            [i + 2, i + 0, i + 1, i + 2, i + 1, i + 3]
+            [i + 2, i, i + 1, i + 2, i + 1, i + 3]
         })
-        .flatten()
         .collect_vec();
 
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
@@ -415,7 +409,7 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     mesh
 }
 
-pub fn combine_meshes(
+/* pub fn combine_meshes(
     meshes: &[Mesh],
     transforms: &[Transform],
     use_normals: bool,
@@ -434,13 +428,12 @@ pub fn combine_meshes(
 
     let mut indices_offset = 0;
 
-    if meshes.len() != transforms.len() {
-        panic!(
-            "meshes.len({}) != transforms.len({})",
-            meshes.len(),
-            transforms.len()
-        );
-    }
+    assert!(
+        meshes.len() == transforms.len(),
+        "meshes.len({}) != transforms.len({})",
+        meshes.len(),
+        transforms.len()
+    );
 
     for (mesh, trans) in meshes.iter().zip(transforms) {
         if let Indices::U32(mesh_indices) = &mesh.indices().unwrap() {
@@ -535,26 +528,19 @@ pub fn combine_meshes(
             indices_offset += positions_len as u32;
         }
     }
-
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-
     if use_normals {
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     }
-
     if use_tangents {
         mesh.insert_attribute(Mesh::ATTRIBUTE_TANGENT, tangets);
     }
-
     if use_uvs {
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     }
-
     if use_colors {
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
     }
-
     mesh.set_indices(Some(Indices::U32(indices)));
-
     mesh
-}
+} */

@@ -8,15 +8,6 @@ use bevy::math::{
     Vec2, Vec3,
 };
 use itertools::Itertools;
-use num_traits::{AsPrimitive, FromPrimitive};
-
-use crate::{
-    chunk::chunk_tile_position::CardinalDirection,
-    world::{
-        heightmap::{HeightmapVertex, HeightmapsResource},
-        road::Road,
-    },
-};
 
 pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
     let normal = (Vec3::from_array(b) - Vec3::from_array(a))
@@ -39,14 +30,6 @@ pub fn unnormalized_normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 
 pub fn normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     unnormalized_normal_vector(a, b, c).normalize()
-}
-
-pub fn average_vectors<const N: usize>(list: [Vec3; N]) -> Vec3 {
-    let mut sum = Vec3::new(0.0, 0.0, 0.0);
-    for vector in list {
-        sum += vector;
-    }
-    sum / N as f32
 }
 
 pub trait RoundBy {
@@ -93,7 +76,7 @@ pub trait Mean {
     {
         let mut sum = T::default();
         let mut count: usize = 0;
-        for item in self.into_iter() {
+        for item in &mut *self {
             sum = sum + *item.borrow();
             count += 1;
         }
@@ -108,7 +91,7 @@ pub trait Mean {
     {
         let mut sum = T::default();
         let mut count: usize = 0;
-        for item in self.into_iter() {
+        for item in &mut *self {
             sum = sum + *item.borrow();
             count += 1;
         }
