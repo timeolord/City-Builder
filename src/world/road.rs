@@ -3,25 +3,23 @@ pub mod road_tile;
 
 use itertools::Itertools;
 use std::{collections::HashMap, f32::consts::PI};
-use strict_num::ApproxEq;
 
 use bevy::{math::cubic_splines::CubicCurve, prelude::*};
-use line_drawing::Bresenham;
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, TilePosition},
     constants::TILE_SIZE,
     cursor::CurrentTile,
     math_utils::{straight_bezier_curve, Arclength, Mean, RoundBy},
-    mesh_generator::{combine_meshes, create_box_mesh, create_road_mesh},
+    mesh_generator::create_road_mesh,
     GameState,
 };
 
 use self::{pathfinding::PathfindingPlugin, road_tile::RoadTile};
 
 use super::{
-    heightmap::{FlattenWithDirection, HeightmapsResource},
-    tile_highlight::{self, Duration, HighlightTileEvent},
+    heightmap::{HeightmapVertex, HeightmapsResource},
+    tile_highlight::{Duration, HighlightTileEvent},
     tools::{CurrentTool, ToolType},
 };
 
@@ -433,10 +431,10 @@ fn spawn_road_event_handler(
         for row in road.row_tiles() {
             let average_tile = row
                 .iter()
-                .map(|(p, _)| Vec4::from_array(heightmaps[p]))
+                .map(|(p, _)| Vec4::from_array(heightmaps[p].into()))
                 .mean_f32();
             for (position, _) in row {
-                let mut tile = average_tile.to_array();
+                let mut tile: HeightmapVertex = average_tile.to_array().into();
                 let tile = tile.flatten_with_direction(road.direction());
                 tiles_to_change.push((position, *tile));
             }

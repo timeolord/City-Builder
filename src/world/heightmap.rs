@@ -1,19 +1,19 @@
 use array2d::Array2D;
 use bevy::{
     ecs::system::Resource,
-    math::{UVec2, Vec2, Vec3, Vec3Swizzles},
+    math::{UVec2, Vec2, Vec3, Vec3Swizzles, Vec4},
 };
 use bevy_easings::Lerp;
 use noise::{NoiseFn, Perlin};
-use std::ops::{Index, IndexMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, ChunkPosition, TilePosition, TilePosition2D},
     constants::{CHUNK_SIZE, HEIGHT_STEP, TILE_SIZE},
-    math_utils::{unnormalized_normal_array, Mean, RoundBy},
+    math_utils::{Mean, RoundBy},
 };
 
-use super::{WorldSettings, WorldSize};
+use super::WorldSettings;
 
 #[derive(Resource, Clone)]
 pub struct HeightmapsResource {
@@ -55,10 +55,10 @@ impl HeightmapsResource {
         self[TilePosition::from_world_position(position).chunk_position()]
             .get_from_world_position(position)
     }
-    pub fn edit_tile(&mut self, position: TilePosition, heights: [f32; 4]) {
+    pub fn edit_tile(&mut self, position: TilePosition, heights: HeightmapVertex) {
         self.edit_tiles(vec![position], vec![heights])
     }
-    pub fn edit_tiles(&mut self, positions: Vec<TilePosition>, heights: Vec<[f32; 4]>) {
+    pub fn edit_tiles(&mut self, positions: Vec<TilePosition>, heights: Vec<HeightmapVertex>) {
         for (position, heights) in positions.iter().zip(heights.into_iter()) {
             self.dirty_chunks[position.chunk_position().as_tuple()] = true;
             self[*position] = heights;
@@ -201,12 +201,58 @@ impl IndexMut<&mut TilePosition> for HeightmapsResource {
     }
 }
 
-pub type HeightmapVertex = [f32; 4];
-pub trait FlattenWithDirection {
-    fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self;
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeightmapVertex([f32; 4]);
+impl Deref for HeightmapVertex {
+    type Target = [f32; 4];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
-impl FlattenWithDirection for HeightmapVertex {
-    fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self {
+impl DerefMut for HeightmapVertex {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl From<[f32; 4]> for HeightmapVertex {
+    fn from(array: [f32; 4]) -> Self {
+        Self(array)
+    }
+}
+impl From<HeightmapVertex> for [f32; 4] {
+    fn from(vertex: HeightmapVertex) -> Self {
+        vertex.0
+    }
+}
+impl TryFrom<Vec<f32>> for HeightmapVertex {
+    type Error = &'static str;
+
+    fn try_from(value: Vec<f32>) -> Result<Self, Self::Error> {
+        if value.len() != 4 {
+            return Err("HeightmapVertex must be of length 4");
+        }
+        Ok(Self(value.try_into().unwrap()))
+    }
+}
+impl From<HeightmapVertex> for Vec<f32> {
+    fn from(vertex: HeightmapVertex) -> Self {
+        vertex.0.to_vec()
+    }
+}
+impl From<Vec4> for HeightmapVertex {
+    fn from(vec: Vec4) -> Self {
+        Self(vec.into())
+    }
+}
+impl From<HeightmapVertex> for Vec4 {
+    fn from(vertex: HeightmapVertex) -> Self {
+        vertex.0.into()
+    }
+}
+
+impl HeightmapVertex {
+    pub fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self {
         match direction {
             CardinalDirection::North | CardinalDirection::South => {
                 self[2] = self[1];
@@ -328,7 +374,7 @@ pub fn generate_heightmap(world_settings: WorldSettings, position: ChunkPosition
                 (bottom_left as f32).round_by(HEIGHT_STEP),
             ];
 
-            heightmap.heightmap[(x as usize, y as usize)] = heights;
+            heightmap.heightmap[(x as usize, y as usize)] = heights.into();
         }
     }
     heightmap
