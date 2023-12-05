@@ -43,7 +43,7 @@ impl Plugin for RoadPlugin {
         );
         app.add_systems(
             Update,
-            (highlight_road_segments).run_if(in_state(GameState::World)),
+            (debug_road_highlight).run_if(in_state(GameState::World)),
         );
         app.add_event::<SpawnRoadEvent>();
         app.add_systems(OnExit(GameState::World), exit);
@@ -208,7 +208,9 @@ impl Road {
             .iter_positions(subdivision)
             .zip_eq(self.normal_vectors_with_subdivisions(subdivision))
             //We round here to prevent floating point errors from screwing us over later. Like 0.9999999999999999 instead of 1.0
-            .map(move |(p, normal)| Vec2::new(p.x.round_by(0.1), p.y.round_by(0.1)) + (normal * horizontal_offset))
+            .map(move |(p, normal)| {
+                Vec2::new(p.x.round_by(0.1), p.y.round_by(0.1)) + (normal * horizontal_offset)
+            })
     }
     fn calculate_road_tiles(&mut self) {
         let mut road_tiles: Vec<(TilePosition, RoadTile)> = Vec::new();
@@ -303,19 +305,16 @@ fn exit(mut commands: Commands) {
     commands.remove_resource::<RoadIntersections>();
 }
 
-fn highlight_road_segments(
+fn debug_road_highlight(
     roads: Query<&Road>,
     mut gizmos: Gizmos,
-    mut highlight_tile_events: EventWriter<HighlightTileEvent>,
     heightmaps: Res<HeightmapsResource>,
 ) {
     for road in roads.iter() {
-        //highlight_tile_events.send(HighlightTileEvent {
-        //    position: road.clone(),
-        //    color: Color::VIOLET,
-        //});
-        let cubic_curve = road.as_world_positions(&heightmaps, 0.1, 0.0);
-        gizmos.linestrip(cubic_curve, Color::VIOLET);
+        gizmos.linestrip(
+            road.as_world_positions(&heightmaps, 0.1, 0.0),
+            Color::VIOLET,
+        );
     }
 }
 
@@ -358,8 +357,10 @@ fn road_tool(
                 }
             }
             //Highlight current road path
-            let snapped_position =
-                snap_to_straight_line(current_tool.starting_point.unwrap(), current_tile.position);
+            let snapped_position = current_tool
+                .starting_point
+                .unwrap()
+                .snap_to_straight_line(current_tile.position);
             //.clamp_to_world(world_settings.world_size);
             let road = Road::new(
                 current_tool.starting_point.unwrap(),
@@ -461,94 +462,4 @@ fn spawn_road_event_handler(
             },
         });
     }
-}
-
-fn snap_to_straight_line(
-    starting_position: TilePosition,
-    current_position: TilePosition,
-) -> TilePosition {
-    let starting_vec = starting_position.position_2d();
-    let current_vec = current_position.position_2d();
-    let relative_vec = current_vec - starting_vec;
-    let length = (relative_vec.distance_squared(IVec2::ZERO) as f32)
-        .sqrt()
-        .round()
-        .abs() as i32;
-    let angle = (relative_vec.y as f32).atan2(relative_vec.x as f32) * 180.0 / PI;
-    let result_position = if angle.abs() == 0.0
-        || angle.abs() == 45.0
-        || angle.abs() == 90.0
-        || angle.abs() == 135.0
-        || angle.abs() == 180.0
-    {
-        current_position
-    } else {
-        let quadrant = angle / 45.0;
-        match quadrant.round() as i32 {
-            0 => {
-                let directional_vec = IVec2::X;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            1 => {
-                let vec_values = (45f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            2 => {
-                let directional_vec = IVec2::Y;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            3 => {
-                let vec_values = (135f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            4 | -4 => {
-                let directional_vec = IVec2::X * -1;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            -1 => {
-                let vec_values = (315f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            -2 => {
-                let directional_vec = IVec2::Y * -1;
-                let tile_vec = directional_vec * length + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            -3 => {
-                let vec_values = (225f32 * PI / 180.0).sin_cos();
-                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
-                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
-                TilePosition {
-                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
-                }
-            }
-            _ => {
-                panic!("Unexpected quadrant: {}", quadrant);
-            }
-        }
-    };
-    result_position
 }

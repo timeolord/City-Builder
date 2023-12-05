@@ -1,4 +1,4 @@
-use std::ops::{Add, Neg, Sub};
+use std::{ops::{Add, Neg, Sub}, f32::consts::PI};
 
 use bevy::{
     ecs::component::Component,
@@ -146,6 +146,96 @@ impl TilePosition {
     //        position: self.position.clamp(min_values, max_values),
     //    }
     //}
+    pub fn snap_to_straight_line(
+    &self,
+    current_position: TilePosition,
+) -> TilePosition {
+    let starting_vec = self.position_2d();
+    let current_vec = current_position.position_2d();
+    let relative_vec = current_vec - starting_vec;
+    let length = (relative_vec.distance_squared(IVec2::ZERO) as f32)
+        .sqrt()
+        .round()
+        .abs() as i32;
+    let angle = (relative_vec.y as f32).atan2(relative_vec.x as f32) * 180.0 / PI;
+    let result_position = if angle.abs() == 0.0
+        || angle.abs() == 45.0
+        || angle.abs() == 90.0
+        || angle.abs() == 135.0
+        || angle.abs() == 180.0
+    {
+        current_position
+    } else {
+        let quadrant = angle / 45.0;
+        match quadrant.round() as i32 {
+            0 => {
+                let directional_vec = IVec2::X;
+                let tile_vec = directional_vec * length + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            1 => {
+                let vec_values = (45f32 * PI / 180.0).sin_cos();
+                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            2 => {
+                let directional_vec = IVec2::Y;
+                let tile_vec = directional_vec * length + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            3 => {
+                let vec_values = (135f32 * PI / 180.0).sin_cos();
+                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            4 | -4 => {
+                let directional_vec = IVec2::X * -1;
+                let tile_vec = directional_vec * length + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            -1 => {
+                let vec_values = (315f32 * PI / 180.0).sin_cos();
+                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            -2 => {
+                let directional_vec = IVec2::Y * -1;
+                let tile_vec = directional_vec * length + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            -3 => {
+                let vec_values = (225f32 * PI / 180.0).sin_cos();
+                let directional_vec = Vec2::from_array([vec_values.1, vec_values.0]);
+                let tile_vec = (directional_vec * length as f32).round().as_ivec2() + starting_vec;
+                TilePosition {
+                    position: IVec3::new(tile_vec.x as i32, 0, tile_vec.y as i32),
+                }
+            }
+            _ => {
+                panic!("Unexpected quadrant: {}", quadrant);
+            }
+        }
+    };
+    result_position
+}
+
 }
 impl Add<CardinalDirection> for TilePosition {
     type Output = TilePosition;
