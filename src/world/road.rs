@@ -164,17 +164,14 @@ fn road_tool(
     mouse_button: Res<Input<MouseButton>>,
     occupied_road_tiles: Res<RoadTilesResource>,
     world_settings: Res<WorldSettings>,
-    _intersections: Res<RoadIntersectionsResource>,
-    _roads: Query<&Road>,
+    intersections: Res<RoadIntersectionsResource>,
+    roads: Query<&Road>,
 ) {
     if current_tool.tool_type == ToolType::BuildRoad {
         let width = current_tool.tool_strength.round() as u32;
         if width == 0 {
             return;
         }
-        //Flag to check if the road is conflicting with another road
-        let mut conflicting = false;
-
         //Highlight currently selected tile taking into account road width
         highlight_tile_events.send(HighlightTileEvent {
             position: current_tile.position,
@@ -209,54 +206,19 @@ fn road_tool(
             .unwrap()
             .snap_to_straight_line(current_tile.position)
             .clamp_to_world(world_settings.world_size);
-        let road = Road::new(
+
+        let conflicting = highlight_road_path(
             current_tool.starting_point.unwrap(),
             snapped_position,
             width,
+            occupied_road_tiles,
+            intersections,
+            roads,
+            highlight_tile_events,
         );
-        let road_tiles = road.tiles();
-        let starting_wide_tile = current_tool.starting_point.unwrap().to_wide_tile(width);
-        let ending_wide_tile = snapped_position.to_wide_tile(width);
-        //The road can conflict if the starting or ending point is an intersection or if the tile is from a road that is part of the intersection (this allows for diagonal roads to join properly)
-        let mut occupied_road_tiles = occupied_road_tiles.clone();
-        starting_wide_tile.tiles().for_each(|tile| {
-            occupied_road_tiles.remove(&tile);
-        });
-        ending_wide_tile.tiles().for_each(|tile| {
-            occupied_road_tiles.remove(&tile);
-        });
-        //if intersections.contains_key()
-        for (road_position, _) in road_tiles {
-            //Occupied tiles are red, unoccupied are green
-            if occupied_road_tiles.contains(road_position)
-            //&& !intersections.contains_key(road_position)
-            //&& !starting_wide_tile.collides_with_tile(*road_position)
-            //&& !ending_wide_tile.collides_with_tile(*road_position)
-            //&& !intersections[road_position]
-            //    .roads
-            //    .tiles(&roads)
-            //    .contains(road_position)
-            {
-                conflicting = true;
-                highlight_tile_events.send(HighlightTileEvent {
-                    position: *road_position,
-                    color: Color::RED,
-                    duration: Duration::Once,
-                    size: 1,
-                });
-            } else {
-                highlight_tile_events.send(HighlightTileEvent {
-                    position: *road_position,
-                    color: Color::GREEN,
-                    duration: Duration::Once,
-                    size: 1,
-                });
-            }
-        }
 
-        //TODO re-add conflict checker
         //Add ending point on mouse input
-        if mouse_button.just_pressed(MouseButton::Left) {
+        if mouse_button.just_pressed(MouseButton::Left) && !conflicting {
             //If starting point and ending point are the same, do nothing
             if current_tool.starting_point.unwrap() == snapped_position {
                 return;
@@ -273,6 +235,59 @@ fn road_tool(
             current_tool.ending_point = None;
         }
     }
+}
+
+fn highlight_road_path(
+    starting_point: TilePosition,
+    snapped_position: TilePosition,
+    width: u32,
+    occupied_road_tiles: Res<RoadTilesResource>,
+    intersections: Res<RoadIntersectionsResource>,
+    roads: Query<&Road>,
+    mut highlight_tile_events: EventWriter<HighlightTileEvent>,
+) -> bool {
+    //Flag to check if the road is conflicting with another road
+    let mut conflicting = false;
+    let road = Road::new(starting_point, snapped_position, width);
+    let road_tiles = road.tiles();
+    //The road can conflict if the starting or ending point is an intersection or if the tile is from a road that is part of the intersection (this allows for diagonal roads to join properly)
+    let mut occupied_road_tiles = occupied_road_tiles.clone();
+    for position in [starting_point, snapped_position] {
+        if intersections.contains_key(&position) {
+            let wide_tile = position.to_wide_tile(width);
+            wide_tile.tiles().for_each(|tile| {
+                occupied_road_tiles.remove(&tile);
+            });
+            //Prevents collision with the roads on the intersection, to allow for diagonal roads to join properly.
+            intersections[&position]
+                .roads
+                .tiles(&roads)
+                .into_iter()
+                .for_each(|tile| {
+                    occupied_road_tiles.remove(&tile);
+                });
+        }
+    }
+    for (road_position, _) in road_tiles {
+        //Occupied tiles are red, unoccupied are green
+        if occupied_road_tiles.contains(road_position) {
+            conflicting = true;
+            highlight_tile_events.send(HighlightTileEvent {
+                position: *road_position,
+                color: Color::RED,
+                duration: Duration::Once,
+                size: 1,
+            });
+        } else {
+            highlight_tile_events.send(HighlightTileEvent {
+                position: *road_position,
+                color: Color::GREEN,
+                duration: Duration::Once,
+                size: 1,
+            });
+        }
+    }
+    conflicting
 }
 
 fn spawn_road_event_handler(

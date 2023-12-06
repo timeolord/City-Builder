@@ -165,7 +165,8 @@ impl TilePosition {
         position.x += TILE_SIZE / 2.0;
         position.z += TILE_SIZE / 2.0;
         position.x = position.x.floor();
-        position.y = position.y.floor();
+        //y is set to 0 by default
+        position.y = 0.0;
         position.z = position.z.floor();
         TilePosition {
             position: position.as_ivec3(),

@@ -121,12 +121,14 @@ impl Road {
         horizontal_offset: f32,
         subdivision: usize,
     ) -> impl Iterator<Item = Vec2> + '_ {
+        let rounding_amount = 0.01;
         self.bezier_curve
             .iter_positions(subdivision)
             .zip_eq(self.normal_vectors_with_subdivisions(subdivision))
             //We round here to prevent floating point errors from screwing us over later. Like 0.9999999999999999 instead of 1.0
             .map(move |(p, normal)| {
-                Vec2::new(p.x.round_by(0.1), p.y.round_by(0.1)) + (normal * horizontal_offset)
+                Vec2::new(p.x.round_by(rounding_amount), p.y.round_by(rounding_amount))
+                    + (normal * horizontal_offset)
             })
     }
     fn calculate_road_tiles(&mut self) {
