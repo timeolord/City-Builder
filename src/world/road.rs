@@ -42,7 +42,6 @@ impl Plugin for RoadPlugin {
                 road_tool,
                 spawn_road_event_handler,
                 spawn_intersection_event_handler,
-                //create_road_entity
             )
                 .chain()
                 .run_if(in_state(GameState::World)),
@@ -133,14 +132,6 @@ fn debug_road_highlight(
             Color::VIOLET,
         );
         let _center_line = road.center_line_tiles();
-        /* for tile in center_line {
-            tile_highlight_events.send(HighlightTileEvent {
-                position: tile,
-                color: Color::YELLOW,
-                duration: Duration::Once,
-                size: 1,
-            });
-        } */
     }
     intersections.values().for_each(|intersection| {
         tile_highlight_events.send(HighlightTileEvent {
