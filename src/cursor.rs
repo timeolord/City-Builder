@@ -70,6 +70,7 @@ fn tile_cursor(
                     position: current_tile.position,
                     color: Color::BLUE,
                     duration: Duration::Once,
+                    size: 1,
                 });
 
                 let pos = heightmaps.get_from_world_position(intersection_pos);

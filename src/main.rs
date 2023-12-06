@@ -16,6 +16,9 @@ mod math_utils;
 mod menu;
 mod mesh_generator;
 mod world;
+
+use std::env;
+
 use bevy::prelude::*;
 use constants::DEFAULT_TIMESTEP;
 
@@ -34,6 +37,9 @@ fn main() {
         world::WorldPlugin,
         chunk::ChunkPlugin,
     );
+    if cfg!(debug_assertions) {
+        env::set_var("RUST_BACKTRACE", "1");
+    }
     App::new()
         .add_state::<GameState>()
         .add_plugins(plugins)

@@ -1,15 +1,9 @@
-use crate::chunk::chunk_tile_position::{CardinalDirection, TilePosition};
+use crate::chunk::chunk_tile_position::{TilePosition};
 
 #[derive(Hash, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub struct RoadTile {
     pub position: TilePosition,
-    pub direction: CardinalDirection,
+    //pub direction: CardinalDirection,
 }
-impl Default for RoadTile {
-    fn default() -> Self {
-        Self {
-            position: TilePosition::default(),
-            direction: CardinalDirection::North,
-        }
-    }
-}
+

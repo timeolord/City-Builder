@@ -182,7 +182,7 @@ fn building_tool(
                     }
                     return;
                 }
-                if occupied_road_tiles.tiles.contains_key(&starting_point_y0) {
+                if occupied_road_tiles.tiles.contains(&starting_point_y0) {
                     if DEBUG {
                         println!("Can't build on road");
                     }
@@ -267,5 +267,5 @@ fn find_entrance_tile(
     neighbours
         .into_iter()
         .map(|(_, neighbour)| neighbour)
-        .find(|&neighbour| occupied_road_tiles.tiles.contains_key(&neighbour))
+        .find(|&neighbour| occupied_road_tiles.tiles.contains(&neighbour))
 }

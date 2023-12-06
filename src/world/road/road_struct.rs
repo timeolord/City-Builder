@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::f32::consts::PI;
+use std::{collections::HashSet, f32::consts::PI};
 
 use bevy::{math::cubic_splines::CubicCurve, prelude::*};
 
@@ -16,14 +16,14 @@ use super::road_tile::RoadTile;
 pub struct Road {
     starting_position: TilePosition,
     ending_position: TilePosition,
-    width: f32,
+    width: u32,
     bezier_curve: CubicCurve<Vec2>,
     length: f32,
     tiles: Vec<(TilePosition, RoadTile)>,
     direction: CardinalDirection,
 }
 impl Road {
-    pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: f32) -> Self {
+    pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: u32) -> Self {
         let bezier_curve = straight_bezier_curve(
             starting_position.to_world_position_2d(),
             ending_position.to_world_position_2d(),
@@ -64,7 +64,13 @@ impl Road {
             }
         }
     }
-    pub fn width(&self) -> f32 {
+    pub fn starting_position(&self) -> TilePosition {
+        self.starting_position
+    }
+    pub fn ending_position(&self) -> TilePosition {
+        self.ending_position
+    }
+    pub fn width(&self) -> u32 {
         self.width
     }
     pub fn direction(&self) -> CardinalDirection {
@@ -133,7 +139,7 @@ impl Road {
         subdivisions: usize,
     ) -> Vec<(TilePosition, RoadTile)> {
         let mut road_tiles: Vec<(TilePosition, RoadTile)> = Vec::new();
-        let road_width = (self.width / 2.0) - (self.width / 1000.0);
+        let road_width = (self.width as f32 / 2.0) - (self.width as f32 / 1000.0);
 
         let positions = self
             .as_2d_positions_with_subdivision(-road_width, subdivisions)
@@ -150,7 +156,7 @@ impl Road {
                     position,
                     RoadTile {
                         position,
-                        direction: self.direction(),
+                        //direction: self.direction(),
                     },
                 ));
             }
@@ -160,18 +166,8 @@ impl Road {
 
     pub fn row_tiles(&self) -> Vec<Vec<(TilePosition, RoadTile)>> {
         let mut road_tiles = Vec::new();
-        let road_width = (self.width / 2.0) - (self.width / 1000.0);
-        let subdivisions = match self.direction {
-            CardinalDirection::North
-            | CardinalDirection::South
-            | CardinalDirection::East
-            | CardinalDirection::West => self.length().round() as usize,
-            //Subdivide the diagonal roads by the length of the hypotenuse so that each segment is extactly one tile
-            CardinalDirection::NorthEast
-            | CardinalDirection::SouthWest
-            | CardinalDirection::NorthWest
-            | CardinalDirection::SouthEast => (self.length() / 2.0f32.sqrt()).round() as usize,
-        };
+        let road_width = (self.width as f32 / 2.0) - (self.width as f32 / 1000.0);
+        let subdivisions = self.tile_subdivision();
 
         let positions = self
             .as_2d_positions_with_subdivision(-road_width, subdivisions)
@@ -189,7 +185,7 @@ impl Road {
                     position,
                     RoadTile {
                         position,
-                        direction: self.direction(),
+                        //direction: self.direction(),
                     },
                 ));
             }
@@ -197,4 +193,63 @@ impl Road {
         }
         road_tiles.into_iter().unique().collect_vec()
     }
+    fn tile_subdivision(&self) -> usize {
+        match self.direction {
+            CardinalDirection::North
+            | CardinalDirection::South
+            | CardinalDirection::East
+            | CardinalDirection::West => self.length().round() as usize,
+            //Subdivide the diagonal roads by the length of the hypotenuse so that each segment is exactly one tile
+            CardinalDirection::NorthEast
+            | CardinalDirection::SouthWest
+            | CardinalDirection::NorthWest
+            | CardinalDirection::SouthEast => (self.length() / 2.0f32.sqrt()).round() as usize,
+        }
+    }
+    pub fn center_line_tiles(&self) -> impl Iterator<Item = TilePosition> + '_ {
+        self.as_2d_positions_with_subdivision(0.0, self.tile_subdivision())
+            .map(|p| TilePosition::from_world_position(Vec3::new(p.x, 0.0, p.y)))
+    }
+    pub fn intersection(&self, rhs: &Self) -> Option<TilePosition> {
+        let self_center_tiles = self.center_line_tiles().collect::<HashSet<_>>();
+        let rhs_center_tiles = rhs.center_line_tiles().collect::<HashSet<_>>();
+        let intersection = self_center_tiles.intersection(&rhs_center_tiles);
+        intersection.copied().next()
+    }
+    /* fn slope_intercept_line(&self) -> SlopeInterceptLine {
+        SlopeInterceptLine::new(
+            self.starting_position.to_world_position_2d(),
+            self.ending_position.to_world_position_2d(),
+        )
+    }
+    pub fn intersection(&self, rhs: &Road) -> Option<Vec2> {
+        let max_x = self
+            .starting_position
+            .to_world_position_2d()
+            .x
+            .max(self.ending_position.to_world_position_2d().x);
+        let min_x = self
+            .starting_position
+            .to_world_position_2d()
+            .x
+            .min(self.ending_position.to_world_position_2d().x);
+        let max_y = self
+            .starting_position
+            .to_world_position_2d()
+            .y
+            .max(self.ending_position.to_world_position_2d().y);
+        let min_y = self
+            .starting_position
+            .to_world_position_2d()
+            .y
+            .min(self.ending_position.to_world_position_2d().y);
+        let lhs_line = self.slope_intercept_line();
+        let rhs_line = rhs.slope_intercept_line();
+        let point = lhs_line.intersection(rhs_line);
+        if point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y {
+            Some(point)
+        } else {
+            None
+        }
+    } */
 }

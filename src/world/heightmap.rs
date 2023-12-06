@@ -5,7 +5,7 @@ use bevy::{
 };
 use bevy_easings::Lerp;
 use noise::{NoiseFn, Perlin};
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut};
 
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, ChunkPosition, TilePosition, TilePosition2D},
@@ -56,12 +56,12 @@ impl HeightmapsResource {
             .get_from_world_position(position)
     }
     pub fn edit_tile(&mut self, position: TilePosition, heights: HeightmapVertex) {
-        self.edit_tiles(vec![position], vec![heights]);
+        self.edit_tiles(&[position], &[heights]);
     }
-    pub fn edit_tiles(&mut self, positions: Vec<TilePosition>, heights: Vec<HeightmapVertex>) {
-        for (position, heights) in positions.iter().zip(heights.into_iter()) {
+    pub fn edit_tiles(&mut self, positions: &[TilePosition], heights: &[HeightmapVertex]) {
+        for (position, heights) in positions.iter().zip(heights.iter()) {
             self.dirty_chunks[position.chunk_position().as_tuple()] = true;
-            self[*position] = heights;
+            self[*position] = *heights;
             for (direction, neighbour) in position.tile_neighbours() {
                 if positions.contains(&neighbour) {
                     continue;
@@ -201,7 +201,7 @@ impl IndexMut<&mut TilePosition> for HeightmapsResource {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct HeightmapVertex([f32; 4]);
 impl Deref for HeightmapVertex {
     type Target = [f32; 4];
@@ -230,7 +230,7 @@ impl TryFrom<Vec<f32>> for HeightmapVertex {
 
     fn try_from(value: Vec<f32>) -> Result<Self, Self::Error> {
         if value.len() != 4 {
-            return Err("HeightmapVertex must be of length 4");
+            return Err("Heightmap Vertex must be of length 4");
         }
         Ok(Self(value.try_into().unwrap()))
     }
@@ -250,7 +250,23 @@ impl From<HeightmapVertex> for Vec4 {
         vertex.0.into()
     }
 }
+impl Add<HeightmapVertex> for HeightmapVertex {
+    type Output = HeightmapVertex;
 
+    fn add(self, rhs: HeightmapVertex) -> Self::Output {
+        let vec_1: Vec4 = self.into();
+        let vec_2: Vec4 = rhs.into();
+        (vec_1 + vec_2).into()
+    }
+}
+impl Div<f32> for HeightmapVertex {
+    type Output = HeightmapVertex;
+
+    fn div(self, rhs: f32) -> Self::Output {
+        let vec: Vec4 = self.into();
+        (vec / rhs).into()
+    }
+}
 impl HeightmapVertex {
     pub fn flatten_with_direction(&mut self, direction: CardinalDirection) -> &mut Self {
         match direction {
@@ -275,6 +291,12 @@ impl HeightmapVertex {
         }
         self
     }
+    pub fn inner(&self) -> [f32; 4] {
+        self.0
+    }
+    pub fn new(heights: [f32; 4]) -> Self {
+        Self(heights)
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -294,7 +316,7 @@ impl Heightmap {
         let x_1 = &[heights[0]].lerp(&[heights[1]], &normalized_world_position.x);
         let x_2 = &[heights[3]].lerp(&[heights[2]], &normalized_world_position.x);
         let y = x_1.lerp(x_2, &normalized_world_position.y);
-        
+
         Vec3::new(position.x, y[0], position.z)
     }
 }

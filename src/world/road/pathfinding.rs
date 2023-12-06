@@ -3,7 +3,10 @@ use bevy::prelude::*;
 use crate::{
     chunk::chunk_tile_position::{TilePosition, TilePosition2D},
     constants::DEBUG,
-    world::{buildings::NeedsPathFinding, tile_highlight::{HighlightTileEvent, Duration}},
+    world::{
+        buildings::NeedsPathFinding,
+        tile_highlight::{Duration, HighlightTileEvent},
+    },
     GameState,
 };
 
@@ -34,7 +37,6 @@ pub struct Pathfind {
 pub type Distance = usize;
 pub type Path = Vec<TilePosition2D>;
 
-
 fn find_path_event_handler(
     mut commands: Commands,
     mut pathfind_query: Query<(Entity, &NeedsPathFinding)>,
@@ -61,6 +63,7 @@ fn find_path_event_handler(
                         position: TilePosition::from_position_2d(*position),
                         color: Color::GOLD,
                         duration: Duration::Timed(std::time::Duration::from_secs(1)),
+                        size: 1,
                     });
                 }
 

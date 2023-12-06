@@ -1,5 +1,5 @@
 use bevy::{
-    math::{IVec2},
+    math::IVec2,
     render::{
         mesh::{Indices, Mesh},
         render_resource::PrimitiveTopology,
@@ -262,112 +262,104 @@ pub fn create_grid_mesh(heightmap: &Heightmap) -> Mesh {
 }
 
 fn create_grid_attributes(
-        starting_position: TilePosition2D,
-        heightmap: &Heightmap,
-    ) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) {
-        let heights = heightmap[starting_position];
-        let tile_size = 0.5 * TILE_SIZE;
-        let starting_position = starting_position.as_vec2();
-        let vertices = vec![
-            //Outside Square
-            [
-                starting_position.x - tile_size * TILE_SIZE,
-                heights[0],
-                starting_position.y - tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x + tile_size * TILE_SIZE,
-                heights[1],
-                starting_position.y - tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x + tile_size * TILE_SIZE,
-                heights[2],
-                starting_position.y + tile_size * TILE_SIZE,
-            ],
-            [
-                starting_position.x - tile_size * TILE_SIZE,
-                heights[3],
-                starting_position.y + tile_size * TILE_SIZE,
-            ],
-            //Inside Square
-            [
-                starting_position.x - tile_size + GRID_THICKNESS,
-                heights[0],
-                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
-            ],
-            [
-                starting_position.x + tile_size - GRID_THICKNESS,
-                heights[1],
-                starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
-            ],
-            [
-                starting_position.x + tile_size - GRID_THICKNESS,
-                heights[2],
-                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
-            ],
-            [
-                starting_position.x - tile_size + GRID_THICKNESS,
-                heights[3],
-                starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
-            ],
-        ];
-        let uv = vec![
-            [-1.0, -1.0],
-            [1.0, -1.0],
-            [1.0, 1.0],
-            [-1.0, 1.0],
-            //Inside Square
-            [-1.0 + GRID_THICKNESS, -1.0 + GRID_THICKNESS],
-            [1.0 - GRID_THICKNESS, -1.0 + GRID_THICKNESS],
-            [1.0 - GRID_THICKNESS, 1.0 - GRID_THICKNESS],
-            [-1.0 + GRID_THICKNESS, 1.0 - GRID_THICKNESS],
-        ];
-        let indices_count =
-            ((starting_position.x + starting_position.y * CHUNK_SIZE as f32) * 8.0) as u32;
-        let indices = vec![
-            indices_count,
-            indices_count + 4,
-            indices_count + 1,
-            indices_count + 1,
-            indices_count + 4,
-            indices_count + 5, //Top
-            indices_count + 1,
-            indices_count + 5,
-            indices_count + 2,
-            indices_count + 2,
-            indices_count + 5,
-            indices_count + 6, //Right
-            indices_count + 2,
-            indices_count + 6,
-            indices_count + 3,
-            indices_count + 3,
-            indices_count + 6,
-            indices_count + 7, //Bottom
-            indices_count + 3,
-            indices_count + 7,
-            indices_count,
-            indices_count,
-            indices_count + 7,
-            indices_count + 4, //Left
-        ];
-        (vertices, uv, indices)
-    }
+    starting_position: TilePosition2D,
+    heightmap: &Heightmap,
+) -> (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>) {
+    let heights = heightmap[starting_position];
+    let tile_size = 0.5 * TILE_SIZE;
+    let starting_position = starting_position.as_vec2();
+    let vertices = vec![
+        //Outside Square
+        [
+            starting_position.x - tile_size * TILE_SIZE,
+            heights[0],
+            starting_position.y - tile_size * TILE_SIZE,
+        ],
+        [
+            starting_position.x + tile_size * TILE_SIZE,
+            heights[1],
+            starting_position.y - tile_size * TILE_SIZE,
+        ],
+        [
+            starting_position.x + tile_size * TILE_SIZE,
+            heights[2],
+            starting_position.y + tile_size * TILE_SIZE,
+        ],
+        [
+            starting_position.x - tile_size * TILE_SIZE,
+            heights[3],
+            starting_position.y + tile_size * TILE_SIZE,
+        ],
+        //Inside Square
+        [
+            starting_position.x - tile_size + GRID_THICKNESS,
+            heights[0],
+            starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
+        ],
+        [
+            starting_position.x + tile_size - GRID_THICKNESS,
+            heights[1],
+            starting_position.y - tile_size * TILE_SIZE + GRID_THICKNESS,
+        ],
+        [
+            starting_position.x + tile_size - GRID_THICKNESS,
+            heights[2],
+            starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
+        ],
+        [
+            starting_position.x - tile_size + GRID_THICKNESS,
+            heights[3],
+            starting_position.y + tile_size * TILE_SIZE - GRID_THICKNESS,
+        ],
+    ];
+    let uv = vec![
+        [-1.0, -1.0],
+        [1.0, -1.0],
+        [1.0, 1.0],
+        [-1.0, 1.0],
+        //Inside Square
+        [-1.0 + GRID_THICKNESS, -1.0 + GRID_THICKNESS],
+        [1.0 - GRID_THICKNESS, -1.0 + GRID_THICKNESS],
+        [1.0 - GRID_THICKNESS, 1.0 - GRID_THICKNESS],
+        [-1.0 + GRID_THICKNESS, 1.0 - GRID_THICKNESS],
+    ];
+    let indices_count =
+        ((starting_position.x + starting_position.y * CHUNK_SIZE as f32) * 8.0) as u32;
+    let indices = vec![
+        indices_count,
+        indices_count + 4,
+        indices_count + 1,
+        indices_count + 1,
+        indices_count + 4,
+        indices_count + 5, //Top
+        indices_count + 1,
+        indices_count + 5,
+        indices_count + 2,
+        indices_count + 2,
+        indices_count + 5,
+        indices_count + 6, //Right
+        indices_count + 2,
+        indices_count + 6,
+        indices_count + 3,
+        indices_count + 3,
+        indices_count + 6,
+        indices_count + 7, //Bottom
+        indices_count + 3,
+        indices_count + 7,
+        indices_count,
+        indices_count,
+        indices_count + 7,
+        indices_count + 4, //Left
+    ];
+    (vertices, uv, indices)
+}
 
 pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     let height_offset = 0.1;
 
-    let road_width = road.width() / 2.0;
+    let road_width = road.width() as f32 / 2.0;
     let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
     let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
-
-    //println!("{:?}", road.as_world_positions(heightmaps, height_offset, -road_width).collect_vec());
-    //let left_spline_ = road.as_world_positions(heightmaps, height_offset, -road_width).collect_vec();
-    //for (a, b, c) in left_spline_.into_iter().tuple_windows::<(_, _, _)>() {
-    //    if (a.y - b.y).abs() > 0.2 && (b.y - c.y).abs() > 0.2 && (a.y - c.y).abs() < 0.2 {
-    //        println!("{:?} {:?} {:?}", a, b, c);
-    //    }
-    //}
 
     let vertices = left_spline
         .tuple_windows::<(_, _)>()

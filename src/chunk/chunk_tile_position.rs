@@ -39,15 +39,62 @@ impl ChunkPosition {
 pub type Neighbours<T> = EnumMap<CardinalDirection, T>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub struct WideTilePosition {
+    pub position: TilePosition,
+    pub size: u32,
+}
+impl WideTilePosition {
+    pub fn new(position: TilePosition, size: u32) -> Self {
+        Self { position, size }
+    }
+    // The self tile is assumed to be the center of the square
+    pub fn tiles(self) -> impl Iterator<Item = TilePosition> {
+        let size = match self.size {
+            even if even % 2 == 0 => even + 1,
+            odd => odd,
+        };
+        let size = size as i32;
+        let starting_position = self.position.position_2d() - (IVec2::new(size, size) / 2);
+        let mut tiles = Vec::new();
+        for x in 0..size {
+            for y in 0..size {
+                tiles.push(TilePosition::new_2d(
+                    starting_position.x + x,
+                    starting_position.y + y,
+                ));
+            }
+        }
+        tiles.into_iter()
+    }
+    pub fn collides_with_tile(self, tile_position: TilePosition) -> bool {
+        self.tiles().any(|position| position == tile_position)
+    }
+    pub fn collides_with(self, other: WideTilePosition) -> bool {
+        self.tiles()
+            .any(|position| other.collides_with_tile(position))
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct TilePosition {
     pub position: IVec3,
 }
 
 impl TilePosition {
-    pub fn position_2d(&self) -> TilePosition2D {
+    pub fn new(x: i32, y: i32, z: i32) -> Self {
+        Self {
+            position: IVec3::new(x, y, z),
+        }
+    }
+    pub fn new_2d(x: i32, z: i32) -> Self {
+        Self {
+            position: IVec3::new(x, 0, z),
+        }
+    }
+    pub fn position_2d(self) -> TilePosition2D {
         self.position.xz()
     }
-    pub fn chunk_position(&self) -> ChunkPosition {
+    pub fn chunk_position(self) -> ChunkPosition {
         ChunkPosition {
             position: UVec2::new(
                 ((self.position.x as f32 / CHUNK_SIZE as f32).floor()) as u32,
@@ -55,10 +102,13 @@ impl TilePosition {
             ),
         }
     }
-    pub fn tile_neighbours(&self) -> Neighbours<TilePosition> {
+    pub fn to_wide_tile(self, size: u32) -> WideTilePosition {
+        WideTilePosition::new(self, size)
+    }
+    pub fn tile_neighbours(self) -> Neighbours<TilePosition> {
         let mut neighbours = Neighbours::default();
         for direction in CardinalDirection::iter() {
-            neighbours[direction] = *self + direction;
+            neighbours[direction] = self + direction;
         }
         neighbours
     }
@@ -134,12 +184,8 @@ impl TilePosition {
     }
     pub fn clamp_to_world(&self, world_size: WorldSize) -> TilePosition {
         let mut position = self.position;
-        position.x = position
-            .x
-            .clamp(0, world_size[0] as i32 - CHUNK_SIZE as i32);
-        position.z = position
-            .z
-            .clamp(0, world_size[1] as i32 - CHUNK_SIZE as i32);
+        position.x = position.x.clamp(0, (world_size[0] * CHUNK_SIZE) as i32 - 1);
+        position.z = position.z.clamp(0, (world_size[1] * CHUNK_SIZE) as i32 - 1);
         TilePosition { position }
     }
     pub fn snap_to_straight_line(&self, current_position: TilePosition) -> TilePosition {

@@ -1334,6 +1334,7 @@ dependencies = [
  "bevy_mod_raycast",
  "enum-map",
  "float_eq",
+ "fnv",
  "image",
  "itertools",
  "line_drawing",
