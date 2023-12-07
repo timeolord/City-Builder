@@ -65,14 +65,31 @@ impl Plugin for RoadPlugin {
 pub struct SpawnRoadEvent {
     pub road: Road,
 }
+impl SpawnRoadEvent {
+    pub fn new(road: Road) -> Self {
+        Self { road }
+    }
+}
 #[derive(Event)]
 pub struct UpdateRoadMeshEvent {
     pub road: Entity,
 }
-
-impl SpawnRoadEvent {
-    pub fn new(road: Road) -> Self {
+impl UpdateRoadMeshEvent {
+    pub fn new(road: Entity) -> Self {
         Self { road }
+    }
+}
+#[derive(Bundle)]
+pub struct RoadBundle {
+    pub road: Road,
+    pub pbr: PbrBundle,
+}
+impl RoadBundle {
+    pub fn new(road: Road) -> Self {
+        Self {
+            road,
+            pbr: PbrBundle::default(),
+        }
     }
 }
 
@@ -157,6 +174,7 @@ fn road_tool(
     world_settings: Res<WorldSettings>,
     intersections: Res<RoadIntersectionsResource>,
     roads: Query<&Road>,
+    _spawn_intersection_events: EventWriter<SpawnIntersectionEvent>,
 ) {
     if current_tool.tool_type == ToolType::BuildRoad {
         let width = current_tool.tool_strength.round() as u32;
@@ -249,14 +267,38 @@ fn highlight_road_path(
             wide_tile.tiles().for_each(|tile| {
                 occupied_road_tiles.remove(&tile);
             });
-            //Prevents collision with the roads on the intersection, to allow for diagonal roads to join properly.
+            //Prevents collision with the second wide tile of the center line of the road on the intersection, to allow for diagonal roads to join properly.
             intersections[&position]
                 .roads
-                .tiles(&roads)
-                .into_iter()
+                .iter()
+                .filter_map(|(_, road_option)| {
+                    road_option.as_ref().map(|road_id| {
+                        roads
+                            .get(*road_id)
+                            .unwrap()
+                            .center_line_tiles()
+                            .nth(1)
+                            .unwrap()
+                            .to_wide_tile(roads.get(*road_id).unwrap().width())
+                    })
+                })
                 .for_each(|tile| {
-                    occupied_road_tiles.remove(&tile);
+                    tile.tiles().for_each(|tile| {
+                        occupied_road_tiles.remove(&tile);
+                    });
                 });
+        }
+        //If the road starts or ends on an existing road's center tiles then it will spawn a new intersection at that point
+        //So it doesn't conflict with the road
+        //Unless the roads are the along the same axis, then it will conflict
+        for other_road in roads.iter().filter(|other_road| {
+            other_road.center_line_tiles().contains(&position)
+                && !(other_road.direction() == road.direction()
+                    || other_road.direction() == -road.direction())
+        }) {
+            other_road.tiles().iter().for_each(|(tile, _)| {
+                occupied_road_tiles.remove(tile);
+            });
         }
     }
     for (road_position, _) in road_tiles {
@@ -288,7 +330,7 @@ fn spawn_road_event_handler(
     mut occupied_road_tiles: ResMut<RoadTilesResource>,
     mut intersection_events: EventWriter<SpawnIntersectionEvent>,
     mut update_road_mesh_events: EventWriter<UpdateRoadMeshEvent>,
-    other_roads: Query<&Road>,
+    //_other_roads: Query<&Road>,
 ) {
     for spawn_road_event in spawn_road_events.read() {
         let road = &spawn_road_event.road;
@@ -310,7 +352,7 @@ fn spawn_road_event_handler(
         heightmaps.edit_tiles(&positions, &heights);
 
         //Spawns road component
-        let road_entity = commands.spawn(road.clone()).id();
+        let road_entity = commands.spawn(RoadBundle::new(road.clone())).id();
 
         //Spawn intersections for the starting and ending positions of the road
         for position in &[road.starting_position(), road.ending_position()] {
@@ -322,17 +364,6 @@ fn spawn_road_event_handler(
             }
             let intersection = RoadIntersection::new(*position, road.width(), enum_map);
             intersection_events.send(SpawnIntersectionEvent { intersection });
-        }
-        //Spawn intersections when a road intersects with another road
-        for other_road in other_roads.iter() {
-            if let Some(intersection_position) = road.intersection(other_road) {
-                let mut enum_map = ConnectedRoads::default();
-                enum_map[road.direction()] = Some(road_entity);
-                //enum_map[-road.direction()] = Some(other_road);
-                let intersection =
-                    RoadIntersection::new(intersection_position, road.width(), enum_map);
-                intersection_events.send(SpawnIntersectionEvent { intersection });
-            }
         }
 
         //Update Road Mesh
@@ -352,7 +383,7 @@ fn update_road_mesh_event_handler(
     heightmaps: Res<HeightmapsResource>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut material_assets: ResMut<Assets<StandardMaterial>>,
-    mut commands: Commands,
+    mut query: Query<(&mut Handle<Mesh>, &mut Handle<StandardMaterial>), With<Road>>,
 ) {
     for event in events.read() {
         let road = roads.get(event.road).unwrap();
@@ -364,11 +395,24 @@ fn update_road_mesh_event_handler(
         material.perceptual_roughness = 1.0;
         material.reflectance = 0.0;
 
-        commands.entity(entity).remove::<PbrBundle>();
-        commands.entity(entity).insert(PbrBundle {
-            mesh: meshes.add(mesh),
-            material: material_assets.add(material),
-            ..default()
-        });
+        //Update mesh
+        if let Ok((mut mesh_handle, mut material_handle)) = query.get_mut(entity) {
+            match meshes.get_mut(mesh_handle.id()) {
+                Some(meshes) => {
+                    *meshes = mesh;
+                }
+                None => {
+                    *mesh_handle = meshes.add(mesh);
+                }
+            }
+            match material_assets.get_mut(material_handle.id()) {
+                Some(material_assets) => {
+                    *material_assets = material;
+                }
+                None => {
+                    *material_handle = material_assets.add(material);
+                }
+            }
+        }
     }
 }

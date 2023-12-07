@@ -26,7 +26,7 @@ impl Plugin for ChunkPlugin {
                 .run_if(in_state(GameState::AssetBuilder).or_else(in_state(GameState::World))),
         );
         app.add_systems(
-            PostUpdate,
+            PreUpdate,
             despawn_entity_event_handler
                 .run_if(in_state(GameState::AssetBuilder).or_else(in_state(GameState::World))),
         );
@@ -45,6 +45,11 @@ pub struct SpawnChunkEvent {
 #[derive(Event)]
 pub struct DespawnEntityEvent {
     pub entity: Entity,
+}
+impl DespawnEntityEvent {
+    pub fn new(entity: Entity) -> Self {
+        Self { entity }
+    }
 }
 
 fn setup(

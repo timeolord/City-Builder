@@ -5,12 +5,15 @@ use enum_map::EnumMap;
 use itertools::Itertools;
 
 use crate::{
-    chunk::chunk_tile_position::{CardinalDirection, TilePosition, WideTilePosition},
+    chunk::{
+        chunk_tile_position::{CardinalDirection, TilePosition, WideTilePosition},
+        DespawnEntityEvent,
+    },
     math_utils::Mean,
     world::heightmap::{HeightmapVertex, HeightmapsResource},
 };
 
-use super::{road_struct::Road, RoadTilesResource};
+use super::{road_struct::Road, RoadTilesResource, SpawnRoadEvent, UpdateRoadMeshEvent};
 
 #[derive(Event, Clone, Debug)]
 pub struct SpawnIntersectionEvent {
@@ -33,8 +36,37 @@ pub fn spawn_intersection_event_handler(
     mut intersections: ResMut<RoadIntersectionsResource>,
     mut heightmaps: ResMut<HeightmapsResource>,
     mut occupied_tiles: ResMut<RoadTilesResource>,
+    roads: Query<(Entity, &Road)>,
+    mut spawn_roads_events: EventWriter<SpawnRoadEvent>,
+    mut despawn_entity_events: EventWriter<DespawnEntityEvent>,
+    mut update_road_mesh_events: EventWriter<UpdateRoadMeshEvent>,
 ) {
     for event in events.read() {
+        //Check if the intersection is on a road section
+        //Ignore the first and last tile since intersections are spawned there, otherwise we would get an infinite loop
+        let mut removed_entities = Vec::new();
+        for (entity, road) in roads.iter() {
+            if road
+                .center_line_tiles()
+                .collect_vec()
+                .into_iter()
+                .dropping(1)
+                .dropping_back(1)
+                .contains(&event.position())
+            {
+                //Split the road into two sections
+                let new_road_1 =
+                    Road::new(road.starting_position(), event.position(), road.width());
+                let new_road_2 = Road::new(event.position(), road.ending_position(), road.width());
+                //Remove the old road
+                despawn_entity_events.send(DespawnEntityEvent::new(entity));
+                removed_entities.push(entity);
+                //Spawn new roads
+                spawn_roads_events.send(SpawnRoadEvent::new(new_road_1));
+                spawn_roads_events.send(SpawnRoadEvent::new(new_road_2));
+            }
+        }
+        //Replace the intersection if it already exists
         let intersection = if intersections.contains_key(&event.position()) {
             let mut new_intersection = intersections.get(&event.position()).unwrap().clone();
             for (direction, road) in &*event.roads {
@@ -47,7 +79,6 @@ pub fn spawn_intersection_event_handler(
         } else {
             event.intersection.clone()
         };
-        intersections.insert(event.position(), intersection);
         //Flatten the terrain
         let average_height = event
             .tiles()
@@ -65,6 +96,16 @@ pub fn spawn_intersection_event_handler(
         for tile in event.tiles() {
             occupied_tiles.insert(*tile);
         }
+        //Update the meshes of all connected roads to fix the terrain
+        intersection.roads.iter().for_each(|(_, road)| {
+            if let Some(road) = road {
+                //Don't update the mesh if the road was split, since the current entity is already despawned
+                if !removed_entities.contains(road) {
+                    update_road_mesh_events.send(UpdateRoadMeshEvent::new(*road));
+                }
+            }
+        });
+        intersections.insert(event.position(), intersection);
     }
 }
 
@@ -141,7 +182,10 @@ pub struct ConnectedRoads(EnumMap<CardinalDirection, Option<Entity>>);
 impl ConnectedRoads {
     pub fn tiles(&self, roads: &Query<&Road>) -> Vec<TilePosition> {
         self.iter()
-            .filter_map(move |(_, road)| road.as_ref().map(|road| roads.get(*road).unwrap().tiles().clone()))
+            .filter_map(move |(_, road)| {
+                road.as_ref()
+                    .map(|road| roads.get(*road).unwrap().tiles().clone())
+            })
             .flatten()
             .map(|(a, _)| a)
             .collect_vec()
