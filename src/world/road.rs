@@ -10,14 +10,18 @@ use bevy::prelude::*;
 use itertools::Itertools;
 
 use crate::{
-    chunk::chunk_tile_position::TilePosition, cursor::CurrentTile, math_utils::Mean,
-    mesh_generator::create_road_mesh, GameState,
+    chunk::chunk_tile_position::TilePosition,
+    constants::ROAD_HEIGHT,
+    cursor::CurrentTile,
+    math_utils::{Mean, RoundEvenUp},
+    mesh_generator::create_road_mesh,
+    GameState,
 };
 
 use self::{
     intersection::{
-        spawn_intersection_event_handler, ConnectedRoads, RoadIntersection,
-        RoadIntersectionsResource, SpawnIntersectionEvent,
+        spawn_intersection_event_handler, spawn_intersection_meshes, ConnectedRoads,
+        RoadIntersection, RoadIntersectionsResource, SpawnIntersectionEvent,
     },
     pathfinding::PathfindingPlugin,
     road_struct::Road,
@@ -42,6 +46,8 @@ impl Plugin for RoadPlugin {
                 road_tool,
                 spawn_road_event_handler,
                 spawn_intersection_event_handler,
+                spawn_intersection_meshes,
+                //remove_redundant_intersections,
             )
                 .chain()
                 .run_if(in_state(GameState::World)),
@@ -145,10 +151,25 @@ fn debug_road_highlight(
 ) {
     for road in roads.iter() {
         gizmos.linestrip(
-            road.as_world_positions(&heightmaps, 0.1, 0.0),
+            road.as_world_positions(&heightmaps, ROAD_HEIGHT, 0.0),
             Color::VIOLET,
         );
-        let _center_line = road.center_line_tiles();
+        let vector_lines = road.to_vector_lines();
+        for (vector_line, color) in vector_lines
+            .into_iter()
+            .zip_eq([Color::RED, Color::BLUE].into_iter())
+        {
+            let curve = vector_line.to_curve();
+            let curve_positions = curve
+                .iter_positions(100)
+                .map(|p| {
+                    let mut heights = heightmaps.get_from_world_position_2d(p);
+                    heights.y += 0.1;
+                    heights
+                })
+                .collect_vec();
+            gizmos.linestrip(curve_positions, color);
+        }
     }
     intersections.values().for_each(|intersection| {
         tile_highlight_events.send(HighlightTileEvent {
@@ -167,14 +188,13 @@ fn debug_road_highlight(
 fn road_tool(
     current_tile: Res<CurrentTile>,
     mut spawn_road_events: EventWriter<SpawnRoadEvent>,
-    mut highlight_tile_events: EventWriter<HighlightTileEvent>,
+    highlight_tile_events: EventWriter<HighlightTileEvent>,
     mut current_tool: ResMut<CurrentTool>,
     mouse_button: Res<Input<MouseButton>>,
     occupied_road_tiles: Res<RoadTilesResource>,
     world_settings: Res<WorldSettings>,
     intersections: Res<RoadIntersectionsResource>,
     roads: Query<&Road>,
-    _spawn_intersection_events: EventWriter<SpawnIntersectionEvent>,
 ) {
     if current_tool.tool_type == ToolType::BuildRoad {
         let width = current_tool.tool_strength.round() as u32;
@@ -182,20 +202,20 @@ fn road_tool(
             return;
         }
         //Highlight currently selected tile taking into account road width
-        highlight_tile_events.send(HighlightTileEvent {
-            position: current_tile.position,
-            color: Color::GREEN,
-            duration: Duration::Once,
-            size: width,
-        });
-        if let Some(starting_point) = current_tool.starting_point {
+        //highlight_tile_events.send(HighlightTileEvent {
+        //    position: current_tile.position,
+        //    color: Color::GREEN,
+        //    duration: Duration::Once,
+        //    size: width,
+        //});
+        if let Some(_starting_point) = current_tool.starting_point {
             //Highlight Road Starting Point
-            highlight_tile_events.send(HighlightTileEvent {
-                position: starting_point,
-                color: Color::PINK,
-                duration: Duration::Once,
-                size: width,
-            });
+            //highlight_tile_events.send(HighlightTileEvent {
+            //    position: starting_point,
+            //    color: Color::PINK,
+            //    duration: Duration::Once,
+            //    size: width,
+            //});
         } else {
             //Add starting point on mouse input
             if mouse_button.just_pressed(MouseButton::Left) {
@@ -259,31 +279,48 @@ fn highlight_road_path(
     let mut conflicting = false;
     let road = Road::new(starting_point, snapped_position, width);
     let road_tiles = road.tiles();
-    //The road can conflict if the starting or ending point is an intersection or if the tile is from a road that is part of the intersection (this allows for diagonal roads to join properly)
+
     let mut occupied_road_tiles = occupied_road_tiles.clone();
+    //The roads are not allowed to be directly next to each other
+    let neighbours = occupied_road_tiles
+        .iter()
+        .flat_map(|tile| tile.tile_neighbours().as_array().to_vec())
+        .chain(intersections.values().flat_map(|intersection| {
+            intersection
+                .tiles()
+                .iter()
+                .flat_map(|tile| tile.tile_neighbours().as_array().to_vec())
+        }))
+        .collect_vec();
+    occupied_road_tiles.extend(neighbours.iter());
+    //println!("{:?}", neighbours.clone().collect_vec());
     for position in [starting_point, snapped_position] {
+        //The road can conflict if the starting or ending point is an intersection
         if intersections.contains_key(&position) {
-            let wide_tile = position.to_wide_tile(width);
-            wide_tile.tiles().for_each(|tile| {
-                occupied_road_tiles.remove(&tile);
+            let intersection = intersections.get(&position).unwrap();
+            intersection.tiles().iter().for_each(|tile| {
+                occupied_road_tiles.remove(tile);
             });
-            //Prevents collision with the second wide tile of the center line of the road on the intersection, to allow for diagonal roads to join properly.
+            //Allows the neighbours of the intersection to be occupied by the road
+            intersection
+                .tiles()
+                .iter()
+                .flat_map(|tile| tile.tile_neighbours().as_array().to_vec())
+                .for_each(|tile| {
+                    occupied_road_tiles.remove(&tile);
+                });
+            //Prevents collision with the tiles and neighbouring tiles of the roads on the intersection, to allow for diagonal roads to join properly.
             intersections[&position]
                 .roads
                 .iter()
                 .filter_map(|(_, road_option)| {
-                    road_option.as_ref().map(|road_id| {
-                        roads
-                            .get(*road_id)
-                            .unwrap()
-                            .center_line_tiles()
-                            .nth(1)
-                            .unwrap()
-                            .to_wide_tile(roads.get(*road_id).unwrap().width())
-                    })
+                    road_option
+                        .as_ref()
+                        .map(|road_id| roads.get(*road_id).unwrap().tiles().iter().map(|(a, _)| a))
                 })
+                .flatten()
                 .for_each(|tile| {
-                    tile.tiles().for_each(|tile| {
+                    tile.tile_neighbours().into_iter().for_each(|(_, tile)| {
                         occupied_road_tiles.remove(&tile);
                     });
                 });
@@ -291,14 +328,31 @@ fn highlight_road_path(
         //If the road starts or ends on an existing road's center tiles then it will spawn a new intersection at that point
         //So it doesn't conflict with the road
         //Unless the roads are the along the same axis, then it will conflict
+        //Also if the road point is too close to a preexisting intersection, it will conflict
+        let mut intersection_positions = intersections.iter().flat_map(|(_, intersection)| {
+            intersection
+                .position()
+                .to_wide_tile(intersection.size.round_even_up() * 2)
+                .tiles()
+        });
+
         for other_road in roads.iter().filter(|other_road| {
             other_road.center_line_tiles().contains(&position)
                 && !(other_road.direction() == road.direction()
                     || other_road.direction() == -road.direction())
+                && !intersection_positions.contains(&position)
         }) {
             other_road.tiles().iter().for_each(|(tile, _)| {
                 occupied_road_tiles.remove(tile);
             });
+            //Allows the neighbours of the new intersection to be occupied by the road
+            other_road
+                .tiles()
+                .iter()
+                .flat_map(|(tile, _)| tile.tile_neighbours().as_array().to_vec())
+                .for_each(|tile| {
+                    occupied_road_tiles.remove(&tile);
+                });
         }
     }
     for (road_position, _) in road_tiles {
@@ -330,26 +384,11 @@ fn spawn_road_event_handler(
     mut occupied_road_tiles: ResMut<RoadTilesResource>,
     mut intersection_events: EventWriter<SpawnIntersectionEvent>,
     mut update_road_mesh_events: EventWriter<UpdateRoadMeshEvent>,
-    //_other_roads: Query<&Road>,
 ) {
     for spawn_road_event in spawn_road_events.read() {
         let road = &spawn_road_event.road;
 
-        //Flatten road tiles along each row
-        let mut tiles_to_change = Vec::new();
-        for row in road.row_tiles() {
-            let average_tile = row
-                .iter()
-                .map(|(p, _)| Vec4::from_array(heightmaps[p].into()))
-                .mean_f32();
-            for (position, _) in row {
-                let mut tile: HeightmapVertex = average_tile.to_array().into();
-                let tile = tile.flatten_with_direction(road.direction());
-                tiles_to_change.push((position, *tile));
-            }
-        }
-        let (positions, heights): (Vec<_>, Vec<_>) = tiles_to_change.into_iter().unzip();
-        heightmaps.edit_tiles(&positions, &heights);
+        flatten_along_road(road, &mut heightmaps);
 
         //Spawns road component
         let road_entity = commands.spawn(RoadBundle::new(road.clone())).id();
@@ -380,7 +419,7 @@ fn spawn_road_event_handler(
 fn update_road_mesh_event_handler(
     mut events: EventReader<UpdateRoadMeshEvent>,
     roads: Query<&Road>,
-    heightmaps: Res<HeightmapsResource>,
+    heightmaps: ResMut<HeightmapsResource>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut material_assets: ResMut<Assets<StandardMaterial>>,
     mut query: Query<(&mut Handle<Mesh>, &mut Handle<StandardMaterial>), With<Road>>,
@@ -395,7 +434,7 @@ fn update_road_mesh_event_handler(
         material.perceptual_roughness = 1.0;
         material.reflectance = 0.0;
 
-        //Update mesh
+        //Update mesh and material if they exist, otherwise add them
         if let Ok((mut mesh_handle, mut material_handle)) = query.get_mut(entity) {
             match meshes.get_mut(mesh_handle.id()) {
                 Some(meshes) => {
@@ -415,4 +454,22 @@ fn update_road_mesh_event_handler(
             }
         }
     }
+}
+
+pub fn flatten_along_road(road: &Road, heightmaps: &mut ResMut<HeightmapsResource>) {
+    //Flatten road tiles along each row
+    let mut tiles_to_change = Vec::new();
+    for row in road.row_tiles() {
+        let average_tile: Vec4 = row
+            .iter()
+            .map(|(p, _)| <HeightmapVertex as Into<Vec4>>::into(heightmaps[p]))
+            .mean_f32();
+        for (position, _) in row {
+            let mut tile: HeightmapVertex = average_tile.to_array().into();
+            let tile = tile.flatten_with_direction(road.direction());
+            tiles_to_change.push((position, *tile));
+        }
+    }
+    let (positions, heights): (Vec<_>, Vec<_>) = tiles_to_change.into_iter().unzip();
+    heightmaps.edit_tiles(&positions, &heights);
 }

@@ -10,7 +10,11 @@ use smooth_bevy_cameras::{
     LookTransform, LookTransformPlugin,
 };
 
-use crate::{constants::DEBUG, world::heightmap::HeightmapsResource, GameState};
+use crate::{
+    constants::{CAMERA_TERRAIN_OFFSET, DEBUG},
+    world::heightmap::HeightmapsResource,
+    GameState,
+};
 
 use super::cursor::RaycastSet;
 
@@ -69,7 +73,7 @@ pub fn input(
 
     //World Camera
     let height = heightmaps.get_from_world_position(transform.target).y;
-    transform.target.y = height + 0.1;
+    transform.target.y = height + CAMERA_TERRAIN_OFFSET;
 
     if mouse_buttons.pressed(MouseButton::Middle) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));

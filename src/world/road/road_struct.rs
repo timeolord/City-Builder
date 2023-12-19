@@ -6,7 +6,7 @@ use bevy::{math::cubic_splines::CubicCurve, prelude::*};
 use crate::{
     chunk::chunk_tile_position::{CardinalDirection, TilePosition},
     constants::TILE_SIZE,
-    math_utils::{straight_bezier_curve, Arclength, RoundBy},
+    math_utils::{straight_bezier_curve, Arclength, RoundBy, VectorLine},
     world::heightmap::HeightmapsResource,
 };
 
@@ -218,40 +218,39 @@ impl Road {
         let intersection = self_center_tiles.intersection(&rhs_center_tiles);
         intersection.copied().next()
     }
-    /* fn slope_intercept_line(&self) -> SlopeInterceptLine {
-        SlopeInterceptLine::new(
-            self.starting_position.to_world_position_2d(),
-            self.ending_position.to_world_position_2d(),
-        )
+    pub fn to_vector_lines(&self) -> [VectorLine; 2] {
+        let width = self.width as f32 / 2.0;
+        let starting = self.as_2d_positions(width).nth(0).unwrap();
+        let ending = self.as_2d_positions(width).last().unwrap();
+        let left_line = VectorLine::new(starting, ending);
+        let starting = self.as_2d_positions(-width).nth(0).unwrap();
+        let ending = self.as_2d_positions(-width).last().unwrap();
+        let right_line = VectorLine::new(starting, ending);
+        [left_line, right_line]
     }
-    pub fn intersection(&self, rhs: &Road) -> Option<Vec2> {
-        let max_x = self
-            .starting_position
-            .to_world_position_2d()
-            .x
-            .max(self.ending_position.to_world_position_2d().x);
-        let min_x = self
-            .starting_position
-            .to_world_position_2d()
-            .x
-            .min(self.ending_position.to_world_position_2d().x);
-        let max_y = self
-            .starting_position
-            .to_world_position_2d()
-            .y
-            .max(self.ending_position.to_world_position_2d().y);
-        let min_y = self
-            .starting_position
-            .to_world_position_2d()
-            .y
-            .min(self.ending_position.to_world_position_2d().y);
-        let lhs_line = self.slope_intercept_line();
-        let rhs_line = rhs.slope_intercept_line();
-        let point = lhs_line.intersection(rhs_line);
-        if point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y {
-            Some(point)
+    pub fn mesh_intersection(&self, rhs: &Self) -> Vec<Vec2> {
+        if self.direction == rhs.direction {
+            Vec::new()
+        } else {
+            self.to_vector_lines()
+                .into_iter()
+                .cartesian_product(rhs.to_vector_lines())
+                .map(|(line, other_line)| line.intersection(&other_line))
+                .collect()
+        }
+        //the other road is left of the current road
+        /* if self.direction.all_left_of().contains(&rhs.direction) {
+            //let line = &self.to_vector_lines()[0];
+            //let other_line = &rhs.to_vector_lines()[1];
+            //Some(line.intersection(other_line))
+
+        } else if self.direction.all_right_of().contains(&rhs.direction) {
+            let line = &self.to_vector_lines()[1];
+            let other_line = &rhs.to_vector_lines()[0];
+            Some(line.intersection(other_line))
         } else {
             None
-        }
-    } */
+            //panic!("Roads should not be parallel");
+        } */
+    }
 }

@@ -31,18 +31,43 @@ pub fn unnormalized_normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 pub fn normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     unnormalized_normal_vector(a, b, c).normalize()
 }
+pub fn round_even_up(n: u32) -> u32 {
+    match n {
+        even if even % 2 == 0 => even + 1,
+        odd => odd,
+    }
+}
 
 pub trait RoundBy {
-    fn round_by(&self, n: Self) -> Self;
+    fn round_by(self, n: Self) -> Self;
 }
 impl RoundBy for f32 {
-    fn round_by(&self, n: Self) -> Self {
+    fn round_by(self, n: Self) -> Self {
         (self / n).round() * n
     }
 }
 impl RoundBy for f64 {
-    fn round_by(&self, n: Self) -> Self {
+    fn round_by(self, n: Self) -> Self {
         (self / n).round() * n
+    }
+}
+pub trait RoundEvenUp {
+    fn round_even_up(self) -> Self;
+}
+impl RoundEvenUp for u32 {
+    fn round_even_up(self) -> Self {
+        match self {
+            even if even % 2 == 0 => even + 1,
+            odd => odd,
+        }
+    }
+}
+impl RoundEvenUp for u64 {
+    fn round_even_up(self) -> Self {
+        match self {
+            even if even % 2 == 0 => even + 1,
+            odd => odd,
+        }
     }
 }
 
@@ -134,5 +159,41 @@ impl<T: num_traits::cast::AsPrimitive<i32>, const N: usize> AsI32<T, N> for [T; 
             array[i] = (*item).as_();
         }
         array
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VectorLine {
+    start: Vec2,
+    end: Vec2,
+}
+impl VectorLine {
+    pub fn new(start: Vec2, end: Vec2) -> Self {
+        Self { start, end }
+    }
+    pub fn get(&self, t: f32) -> Vec2 {
+        self.start.lerp(self.end, t)
+    }
+    pub fn intersection(&self, rhs: &Self) -> Vec2 {
+        //finds the intersection between two vector lines if it exists
+        let a = self.start.x;
+        let b = self.end.x;
+        let c = rhs.start.x;
+        let d = rhs.end.x;
+        let e = self.start.y;
+        let f = self.end.y;
+        let g = rhs.start.y;
+        let h = rhs.end.y;
+        let s = (a * f - c * f + b * g - b * e) / (d * f - b * h);
+        rhs.get(s)
+
+        /* let s = (self.start.x * self.end.y + self.end.x * rhs.start.y
+            - self.end.x * self.start.y
+            - rhs.start.x * self.end.y)
+            / (rhs.end.x * self.end.y - self.end.x * rhs.end.y);
+        rhs.get(s) */
+    }
+    pub fn to_curve(&self) -> CubicCurve<Vec2> {
+        straight_bezier_curve(self.start, self.end)
     }
 }

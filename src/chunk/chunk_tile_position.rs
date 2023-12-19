@@ -443,6 +443,24 @@ impl CardinalDirection {
             CardinalDirection::NorthWest => -45.0,
         }
     }
+    pub fn all_left_of(self) -> Vec<CardinalDirection> {
+        let mut directions = Vec::new();
+        let mut current_direction = self;
+        for _ in 0..3 {
+            current_direction = current_direction.next_counter_clockwise();
+            directions.push(current_direction);
+        }
+        directions
+    }
+    pub fn all_right_of(self) -> Vec<CardinalDirection> {
+        let mut directions = Vec::new();
+        let mut current_direction = self;
+        for _ in 0..3 {
+            current_direction = current_direction.next_clockwise();
+            directions.push(current_direction);
+        }
+        directions
+    }
 }
 impl Neg for CardinalDirection {
     type Output = Self;

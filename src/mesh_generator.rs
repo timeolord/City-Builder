@@ -5,15 +5,16 @@ use bevy::{
         render_resource::PrimitiveTopology,
     },
 };
+use enum_map::EnumMap;
 use itertools::Itertools;
 
 use crate::{
-    chunk::chunk_tile_position::TilePosition2D,
-    constants::{CHUNK_SIZE, GRID_THICKNESS, TILE_SIZE},
+    chunk::chunk_tile_position::{CardinalDirection, TilePosition2D},
+    constants::{CHUNK_SIZE, GRID_THICKNESS, ROAD_HEIGHT, TILE_SIZE},
     math_utils::{normal_vector, unnormalized_normal_array},
     world::{
         heightmap::{Heightmap, HeightmapVertex, HeightmapsResource},
-        road::road_struct::Road,
+        road::{intersection::RoadIntersection, road_struct::Road},
     },
 };
 
@@ -67,8 +68,8 @@ pub fn create_plane_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
     grid_mesh
 }
 
-pub fn create_box_mesh(heights: HeightmapVertex, height_offset: f32) -> Mesh {
-    let tile_size = 0.5 * TILE_SIZE;
+pub fn create_box_mesh(size: f32, heights: HeightmapVertex, height_offset: f32) -> Mesh {
+    let tile_size = 0.5 * size;
     //Top Face
     let vert_0 = [-tile_size, heights[0] + height_offset, -tile_size];
     let vert_1 = [tile_size, heights[1] + height_offset, -tile_size];
@@ -355,11 +356,21 @@ fn create_grid_attributes(
 }
 
 pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
-    let height_offset = 0.1;
+    let height_offset = ROAD_HEIGHT;
 
     let road_width = road.width() as f32 / 2.0;
-    let left_spline = road.as_world_positions(heightmaps, height_offset, -road_width);
-    let right_spline = road.as_world_positions(heightmaps, height_offset, road_width);
+    let left_spline = road
+        .as_world_positions(heightmaps, height_offset, -road_width)
+        .collect_vec()
+        .into_iter();
+    //.dropping(road.width() as usize)
+    //.dropping_back(road.width() as usize);
+    let right_spline = road
+        .as_world_positions(heightmaps, height_offset, road_width)
+        .collect_vec()
+        .into_iter();
+    //.dropping(road.width() as usize)
+    //.dropping_back(road.width() as usize);
 
     let vertices = left_spline
         .tuple_windows::<(_, _)>()
@@ -399,6 +410,70 @@ pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
     mesh.set_indices(Some(Indices::U32(indices)));
 
     mesh
+}
+
+pub fn create_road_intersection_mesh(
+    intersection: &RoadIntersection,
+    heightmaps: &HeightmapsResource,
+    _connected_roads: &EnumMap<CardinalDirection, Option<Road>>,
+) -> Mesh {
+    let heights = heightmaps[intersection.position()];
+    create_box_mesh(intersection.size as f32, heights, ROAD_HEIGHT + 0.01)
+    /* let vert_0 = [-tile_size, heights[0] + height_offset, -tile_size];
+    let vert_1 = [tile_size, heights[1] + height_offset, -tile_size];
+    let vert_2 = [tile_size, heights[2] + height_offset, tile_size];
+    let vert_3 = [-tile_size, heights[3] + height_offset, tile_size];
+    let vert_4 = [0.0, heights[3] + height_offset, 0.0];
+    let vert_5 = [-tile_size, heights[0] - 1.0, -tile_size];
+    let vert_6 = [tile_size, heights[1] - 1.0, -tile_size];
+    let vert_7 = [tile_size, heights[2] - 1.0, tile_size];
+    let vert_8 = [-tile_size, heights[3] - 1.0, tile_size];
+    let vert_9 = [0.0, heights[3] - 1.0, 0.0];
+
+    let vertices = vec![];
+    let uv_0 = [0.0, 0.0];
+    let uv_1 = [1.0, 0.0];
+    let uv_2 = [1.0, 1.0];
+    let uv_3 = [0.0, 1.0];
+    let uv_4 = [0.5, 0.5];
+    //TODO make uvs work for each side?
+    let uvs = vec![
+        uv_0, uv_1, uv_2, uv_3, uv_4, //Bottom Face
+        uv_0, uv_1, uv_4, uv_1, uv_2, uv_4, uv_2, uv_3, uv_4, uv_3, uv_0, uv_4, //Top Face
+    ];
+    let indices = vec![];
+    let normal_a = unnormalized_normal_array(vert_0, vert_4, vert_1)
+        .normalize()
+        .to_array();
+
+    let normals = vec![
+        [0., -1.0, 0.],
+        [0., -1.0, 0.],
+        [0., -1.0, 0.],
+        [0., -1.0, 0.],
+        [0., -1.0, 0.], //Bottom Face
+        normal_a,
+        normal_a,
+        normal_a,
+        normal_b,
+        normal_b,
+        normal_b,
+        normal_c,
+        normal_c,
+        normal_c,
+        normal_d,
+        normal_d,
+        normal_d, //Top Face
+    ];
+    let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+
+    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+
+    grid_mesh.set_indices(Some(Indices::U32(indices)));
+
+    grid_mesh */
 }
 
 /* pub fn combine_meshes(

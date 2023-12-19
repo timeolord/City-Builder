@@ -4,6 +4,7 @@ use bevy::{
     math::{UVec2, Vec2, Vec3, Vec3Swizzles, Vec4},
 };
 use bevy_easings::Lerp;
+use itertools::Itertools;
 use noise::{NoiseFn, Perlin};
 use std::ops::{Add, Deref, DerefMut, Div, Index, IndexMut};
 
@@ -59,7 +60,7 @@ impl HeightmapsResource {
         self.edit_tiles(&[position], &[heights]);
     }
     pub fn edit_tiles(&mut self, positions: &[TilePosition], heights: &[HeightmapVertex]) {
-        for (position, heights) in positions.iter().zip(heights.iter()) {
+        for (position, heights) in positions.iter().zip_eq(heights.iter()) {
             self.dirty_chunks[position.chunk_position().as_tuple()] = true;
             self[*position] = *heights;
             for (direction, neighbour) in position.tile_neighbours() {
