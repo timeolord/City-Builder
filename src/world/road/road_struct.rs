@@ -10,20 +10,23 @@ use crate::{
     world::heightmap::HeightmapsResource,
 };
 
-use super::road_tile::RoadTile;
+use super::{
+    intersection::{RoadIntersection, RoadIntersectionsResource},
+    road_tile::RoadTile,
+};
 
 #[derive(Component, Clone, Debug)]
 pub struct Road {
     starting_position: TilePosition,
     ending_position: TilePosition,
-    width: u32,
+    width: f32,
     bezier_curve: CubicCurve<Vec2>,
     length: f32,
     tiles: Vec<(TilePosition, RoadTile)>,
     direction: CardinalDirection,
 }
 impl Road {
-    pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: u32) -> Self {
+    pub fn new(starting_position: TilePosition, ending_position: TilePosition, width: f32) -> Self {
         let bezier_curve = straight_bezier_curve(
             starting_position.to_world_position_2d(),
             ending_position.to_world_position_2d(),
@@ -70,7 +73,7 @@ impl Road {
     pub fn ending_position(&self) -> TilePosition {
         self.ending_position
     }
-    pub fn width(&self) -> u32 {
+    pub fn width(&self) -> f32 {
         self.width
     }
     pub fn direction(&self) -> CardinalDirection {
@@ -101,17 +104,42 @@ impl Road {
             rotated.normalize_or_zero()
         })
     }
+    pub fn get_intersections(
+        &self,
+        intersections: &Res<RoadIntersectionsResource>,
+    ) -> [RoadIntersection; 2] {
+        intersections
+            .iter()
+            .filter(|(position, _)| {
+                **position == self.starting_position || **position == self.ending_position
+            })
+            .map(|(_, intersection)| intersection.clone())
+            .collect_vec()
+            .try_into()
+            .unwrap()
+    }
     pub fn as_world_positions<'a>(
         &'a self,
         heightmaps: &'a HeightmapsResource,
         height_offset: f32,
         horizontal_offset: f32,
+        intersections: &Res<RoadIntersectionsResource>,
     ) -> impl Iterator<Item = Vec3> + '_ {
-        self.as_2d_positions(horizontal_offset).map(move |p| {
-            let mut position = heightmaps.get_from_world_position_2d(p);
-            position.y += height_offset;
-            position
-        })
+        let intersections = self.get_intersections(intersections);
+        self.as_2d_positions(horizontal_offset)
+            .map(move |p| {
+                let mut position = heightmaps.get_from_world_position_2d(p);
+                position.y += height_offset;
+                position
+            })
+            .filter(move |p| {
+                intersections.iter().all(|intersection| {
+                    let circle_pos = intersection.position().to_world_position_2d();
+                    let radius = intersection.size() / 2.0;
+                    let pos_2d = Vec2::new(p.x, p.z);
+                    (pos_2d - circle_pos).length() >= radius
+                })
+            })
     }
     pub fn as_2d_positions(&self, horizontal_offset: f32) -> impl Iterator<Item = Vec2> + '_ {
         self.as_2d_positions_with_subdivision(horizontal_offset, self.subdivisions())
@@ -141,7 +169,7 @@ impl Road {
         subdivisions: usize,
     ) -> Vec<(TilePosition, RoadTile)> {
         let mut road_tiles: Vec<(TilePosition, RoadTile)> = Vec::new();
-        let road_width = (self.width as f32 / 2.0) - (self.width as f32 / 1000.0);
+        let road_width = (self.width / 2.0) - (self.width / 1000.0);
 
         let positions = self
             .as_2d_positions_with_subdivision(-road_width, subdivisions)
@@ -168,7 +196,7 @@ impl Road {
 
     pub fn row_tiles(&self) -> Vec<Vec<(TilePosition, RoadTile)>> {
         let mut road_tiles = Vec::new();
-        let road_width = (self.width as f32 / 2.0) - (self.width as f32 / 1000.0);
+        let road_width = (self.width / 2.0) - (self.width / 1000.0);
         let subdivisions = self.tile_subdivision();
 
         let positions = self
@@ -219,7 +247,7 @@ impl Road {
         intersection.copied().next()
     }
     pub fn to_vector_lines(&self) -> [VectorLine; 2] {
-        let width = self.width as f32 / 2.0;
+        let width = self.width / 2.0;
         let starting = self.as_2d_positions(width).nth(0).unwrap();
         let ending = self.as_2d_positions(width).last().unwrap();
         let left_line = VectorLine::new(starting, ending);

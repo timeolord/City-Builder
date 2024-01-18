@@ -63,7 +63,7 @@ fn find_path_event_handler(
                         position: TilePosition::from_position_2d(*position),
                         color: Color::GOLD,
                         duration: Duration::Timed(std::time::Duration::from_secs(1)),
-                        size: 1,
+                        size: 1.0,
                     });
                 }
 

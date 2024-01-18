@@ -8,6 +8,7 @@ use std::{collections::HashSet, ops::Deref, ops::DerefMut};
 use bevy::prelude::*;
 
 use itertools::Itertools;
+use num_traits::Zero;
 
 use crate::{
     chunk::chunk_tile_position::TilePosition,
@@ -151,7 +152,7 @@ fn debug_road_highlight(
 ) {
     for road in roads.iter() {
         gizmos.linestrip(
-            road.as_world_positions(&heightmaps, ROAD_HEIGHT, 0.0),
+            road.as_world_positions(&heightmaps, ROAD_HEIGHT, 0.0, &intersections),
             Color::VIOLET,
         );
         let vector_lines = road.to_vector_lines();
@@ -176,7 +177,7 @@ fn debug_road_highlight(
             position: intersection.position(),
             color: Color::BLUE,
             duration: Duration::Once,
-            size: intersection.size,
+            size: intersection.size(),
         });
         let vectors = intersection.connected_road_vectors(&heightmaps);
         for (start, end) in vectors {
@@ -197,8 +198,8 @@ fn road_tool(
     roads: Query<&Road>,
 ) {
     if current_tool.tool_type == ToolType::BuildRoad {
-        let width = current_tool.tool_strength.round() as u32;
-        if width == 0 {
+        let width = current_tool.tool_strength.round();
+        if width.is_zero() {
             return;
         }
         //Highlight currently selected tile taking into account road width
@@ -269,7 +270,7 @@ fn road_tool(
 fn highlight_road_path(
     starting_point: TilePosition,
     snapped_position: TilePosition,
-    width: u32,
+    width: f32,
     occupied_road_tiles: Res<RoadTilesResource>,
     intersections: Res<RoadIntersectionsResource>,
     roads: Query<&Road>,
@@ -332,7 +333,7 @@ fn highlight_road_path(
         let mut intersection_positions = intersections.iter().flat_map(|(_, intersection)| {
             intersection
                 .position()
-                .to_wide_tile(intersection.size.round_even_up() * 2)
+                .to_wide_tile((intersection.size().round() as u32).round_even_up() * 2)
                 .tiles()
         });
 
@@ -363,14 +364,14 @@ fn highlight_road_path(
                 position: *road_position,
                 color: Color::RED,
                 duration: Duration::Once,
-                size: 1,
+                size: 1.0,
             });
         } else {
             highlight_tile_events.send(HighlightTileEvent {
                 position: *road_position,
                 color: Color::GREEN,
                 duration: Duration::Once,
-                size: 1,
+                size: 1.0,
             });
         }
     }
@@ -423,11 +424,12 @@ fn update_road_mesh_event_handler(
     mut meshes: ResMut<Assets<Mesh>>,
     mut material_assets: ResMut<Assets<StandardMaterial>>,
     mut query: Query<(&mut Handle<Mesh>, &mut Handle<StandardMaterial>), With<Road>>,
+    intersections: Res<RoadIntersectionsResource>,
 ) {
     for event in events.read() {
         let road = roads.get(event.road).unwrap();
         let entity = event.road;
-        let mesh = create_road_mesh(road, &heightmaps);
+        let mesh = create_road_mesh(road, &heightmaps, &intersections);
 
         //TODO make unique road material
         let mut material: StandardMaterial = Color::rgb(0.1, 0.1, 0.1).into();

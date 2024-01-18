@@ -3,6 +3,7 @@ use std::{collections::HashMap, ops::Deref, ops::DerefMut};
 use bevy::prelude::*;
 use enum_map::EnumMap;
 use itertools::Itertools;
+use ordered_float::NotNan;
 
 use crate::{
     chunk::{
@@ -41,7 +42,7 @@ pub fn spawn_intersection_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     roads: Query<&Road>,
-    mut gizmos: Gizmos,
+    _gizmos: Gizmos,
 ) {
     for intersection in intersections.values_mut() {
         let connected_roads = intersection.roads.to_roads(&roads);
@@ -56,7 +57,7 @@ pub fn spawn_intersection_meshes(
         .circular_tuple_windows::<(_, _)>()
         .flat_map(|(a, b)| a.mesh_intersection(&b))
         .collect_vec(); */
-        let intersection_points = connected_roads
+        /* let intersection_points = connected_roads
             .clone()
             .into_array()
             .into_iter()
@@ -71,7 +72,7 @@ pub fn spawn_intersection_meshes(
             let mut pos = heightmaps.get_from_world_position_2d(intersection_point);
             pos.y += 0.1;
             gizmos.sphere(pos, Quat::IDENTITY, 0.1, Color::rgb(1.0, 0.0, 0.0));
-        }
+        } */
         if intersection.mesh.is_some() {
             continue;
         }
@@ -180,54 +181,6 @@ pub fn spawn_intersection_event_handler(
         intersections.insert(event.position(), intersection);
     }
 }
-pub fn remove_redundant_intersections(
-    events: EventReader<SpawnIntersectionEvent>,
-    mut intersections: ResMut<RoadIntersectionsResource>,
-    mut spawn_roads_events: EventWriter<SpawnRoadEvent>,
-    mut despawn_entity_events: EventWriter<DespawnEntityEvent>,
-    roads: Query<&Road>,
-) {
-    if events.is_empty() {
-        return;
-    }
-    let mut to_remove = Vec::new();
-    for (_, intersection) in intersections.iter() {
-        //Check if intersection is redundant
-        let intersection_roads = intersection
-            .roads
-            .into_iter()
-            .filter_map(|(_, road_option)| {
-                road_option.and_then(|road_entity| match roads.get(road_entity) {
-                    Ok(road) => Some((road_entity, road)),
-                    Err(_) => None,
-                })
-            })
-            .collect_vec();
-        if intersection_roads.len() == 2
-            && intersection_roads[0].1.direction() == intersection_roads[1].1.direction()
-            && intersection_roads[0].1.width() == intersection_roads[1].1.width()
-        {
-            //Add the intersection to the list of intersections to remove
-            to_remove.push(intersection.position());
-            //Join the two roads
-            let new_road = Road::new(
-                intersection_roads[0].1.starting_position(),
-                intersection_roads[1].1.ending_position(),
-                intersection_roads[0].1.width(),
-            );
-            //Spawn the new road
-            spawn_roads_events.send(SpawnRoadEvent::new(new_road));
-            //Remove the old roads
-            despawn_entity_events.send(DespawnEntityEvent::new(intersection_roads[0].0));
-            despawn_entity_events.send(DespawnEntityEvent::new(intersection_roads[1].0));
-        }
-    }
-    //Remove the redundant intersections
-    for position in to_remove {
-        intersections.remove(&position);
-    }
-}
-
 #[derive(Resource, Default, Debug, Clone, Eq, PartialEq)]
 pub struct RoadIntersectionsResource(HashMap<TilePosition, RoadIntersection>);
 impl RoadIntersectionsResource {
@@ -247,19 +200,19 @@ impl DerefMut for RoadIntersectionsResource {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RoadIntersection {
     position: TilePosition,
-    pub size: u32,
+    size: NotNan<f32>,
     pub roads: ConnectedRoads,
     tiles: Vec<TilePosition>,
     mesh: Option<Entity>,
 }
 impl RoadIntersection {
-    pub fn new(position: TilePosition, size: u32, roads: ConnectedRoads) -> Self {
+    pub fn new(position: TilePosition, size: f32, roads: ConnectedRoads) -> Self {
         Self {
             position,
-            size,
+            size: NotNan::new(size).unwrap(),
             roads,
             tiles: Self::calculate_tiles(position, size),
             mesh: None,
@@ -271,8 +224,11 @@ impl RoadIntersection {
     pub fn tiles(&self) -> &[TilePosition] {
         &self.tiles
     }
-    fn calculate_tiles(starting_position: TilePosition, size: u32) -> Vec<TilePosition> {
-        WideTilePosition::new(starting_position, size)
+    pub fn size(&self) -> f32 {
+        self.size.into_inner()
+    }
+    fn calculate_tiles(starting_position: TilePosition, size: f32) -> Vec<TilePosition> {
+        WideTilePosition::new(starting_position, size.round() as u32)
             .tiles()
             .collect_vec()
         /* starting_position.tiles_from_size(size).collect_vec() */

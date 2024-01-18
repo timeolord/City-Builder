@@ -1,4 +1,5 @@
 use bevy::{
+    ecs::system::Res,
     math::IVec2,
     render::{
         mesh::{Indices, Mesh},
@@ -14,7 +15,10 @@ use crate::{
     math_utils::{normal_vector, unnormalized_normal_array},
     world::{
         heightmap::{Heightmap, HeightmapVertex, HeightmapsResource},
-        road::{intersection::RoadIntersection, road_struct::Road},
+        road::{
+            intersection::{RoadIntersection, RoadIntersectionsResource},
+            road_struct::Road,
+        },
     },
 };
 
@@ -355,18 +359,22 @@ fn create_grid_attributes(
     (vertices, uv, indices)
 }
 
-pub fn create_road_mesh(road: &Road, heightmaps: &HeightmapsResource) -> Mesh {
+pub fn create_road_mesh(
+    road: &Road,
+    heightmaps: &HeightmapsResource,
+    intersections: &Res<RoadIntersectionsResource>,
+) -> Mesh {
     let height_offset = ROAD_HEIGHT;
 
-    let road_width = road.width() as f32 / 2.0;
+    let road_width = road.width() / 2.0;
     let left_spline = road
-        .as_world_positions(heightmaps, height_offset, -road_width)
+        .as_world_positions(heightmaps, height_offset, -road_width, intersections)
         .collect_vec()
         .into_iter();
     //.dropping(road.width() as usize)
     //.dropping_back(road.width() as usize);
     let right_spline = road
-        .as_world_positions(heightmaps, height_offset, road_width)
+        .as_world_positions(heightmaps, height_offset, road_width, intersections)
         .collect_vec()
         .into_iter();
     //.dropping(road.width() as usize)
@@ -418,7 +426,7 @@ pub fn create_road_intersection_mesh(
     _connected_roads: &EnumMap<CardinalDirection, Option<Road>>,
 ) -> Mesh {
     let heights = heightmaps[intersection.position()];
-    create_box_mesh(intersection.size as f32, heights, ROAD_HEIGHT + 0.01)
+    create_box_mesh(intersection.size(), heights, ROAD_HEIGHT - 0.01)
     /* let vert_0 = [-tile_size, heights[0] + height_offset, -tile_size];
     let vert_1 = [tile_size, heights[1] + height_offset, -tile_size];
     let vert_2 = [tile_size, heights[2] + height_offset, tile_size];

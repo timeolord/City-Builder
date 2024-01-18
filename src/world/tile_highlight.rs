@@ -18,7 +18,7 @@ pub struct HighlightTileEvent {
     pub position: TilePosition,
     pub color: Color,
     pub duration: Duration,
-    pub size: u32,
+    pub size: f32,
 }
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Hash)]
@@ -49,12 +49,7 @@ fn tile_highlight_handler(
 
         let mut position = event.position.to_world_position();
         position.y = height.into_iter().reduce(f32::max).unwrap_or(0.0);
-        gizmos.sphere(
-            position,
-            Quat::IDENTITY,
-            0.5 * event.size as f32,
-            event.color,
-        );
+        gizmos.sphere(position, Quat::IDENTITY, 0.5 * event.size, event.color);
     }
     permanent_events.extend(temp_events);
 }

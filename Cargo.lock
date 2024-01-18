@@ -1340,6 +1340,7 @@ dependencies = [
  "line_drawing",
  "noise",
  "num-traits",
+ "ordered-float 4.2.0",
  "pathfinding",
  "petgraph",
  "rand 0.8.5",
@@ -2910,6 +2911,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "4.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a76df7075c7d4d01fdcb46c912dd17fba5b60c78ea480b475f2b6ab6f666584e"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3942,7 +3952,7 @@ dependencies = [
  "fastrand 2.0.1",
  "indexmap 1.9.3",
  "log",
- "ordered-float",
+ "ordered-float 3.9.2",
  "permutation",
  "pretty_env_logger",
  "serde",
