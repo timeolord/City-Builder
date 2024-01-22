@@ -1,47 +1,16 @@
-pub mod buildings;
 pub mod game_time;
-pub mod heightmap;
-pub mod resources;
-pub mod road;
-pub mod terraform;
-pub mod tile_highlight;
-pub mod tools;
-pub mod vehicles;
+
 use std::f32::consts::PI;
 
-use crate::{
-    camera::CameraPlugin,
-    chunk::{chunk_tile_position::ChunkPosition, Grid, SpawnChunkEvent},
-    cursor::CursorPlugin,
-    GameState,
-};
+use crate::GameState;
 use bevy::prelude::*;
-
-use self::{
-    buildings::BuildingsPlugin, game_time::GameTimePlugin, heightmap::HeightmapsResource,
-    resources::ResourcesPlugin, road::RoadPlugin, terraform::TerraformPlugin,
-    tile_highlight::TileHighlightPlugin, tools::ToolsPlugin, vehicles::VehiclesPlugin,
-};
 
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            CameraPlugin,
-            CursorPlugin,
-            TerraformPlugin,
-            RoadPlugin,
-            ToolsPlugin,
-            TileHighlightPlugin,
-            BuildingsPlugin,
-            GameTimePlugin,
-            VehiclesPlugin,
-            ResourcesPlugin,
-        ));
         app.add_systems(Startup, init);
         app.add_systems(OnEnter(GameState::World), setup);
-        app.add_systems(Update, toggle_grid.run_if(in_state(GameState::World)));
         app.add_systems(OnExit(GameState::World), exit);
     }
 }
@@ -77,14 +46,9 @@ fn init(mut commands: Commands) {
         noise_amplitude: 10.0,
     };
     commands.insert_resource(world_settings);
-    commands.insert_resource(HeightmapsResource::new(world_settings));
 }
 
-fn setup(
-    mut commands: Commands,
-    world_settings: Res<WorldSettings>,
-    mut spawn_chunk_event: EventWriter<SpawnChunkEvent>,
-) {
+fn setup(mut commands: Commands, _world_settings: Res<WorldSettings>) {
     // Sun
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
@@ -110,32 +74,4 @@ fn setup(
         color: Color::WHITE,
         brightness: 0.2,
     });
-
-    let world_size = world_settings.world_size;
-    for x in 0..world_size[0] {
-        for y in 0..world_size[1] {
-            spawn_chunk_event.send(SpawnChunkEvent {
-                position: ChunkPosition {
-                    position: UVec2::new(x, y),
-                },
-            });
-        }
-    }
-}
-
-fn toggle_grid(
-    mut query: Query<&mut Visibility, With<Grid>>,
-    keyboard: Res<Input<KeyCode>>,
-    mut grid_visible: ResMut<WorldSettings>,
-) {
-    if keyboard.just_pressed(KeyCode::G) {
-        grid_visible.grid_visibility = match grid_visible.grid_visibility {
-            Visibility::Visible => Visibility::Hidden,
-            Visibility::Hidden => Visibility::Visible,
-            Visibility::Inherited => Visibility::Inherited,
-        };
-        for mut visible in &mut query {
-            *visible = grid_visible.grid_visibility;
-        }
-    }
 }
