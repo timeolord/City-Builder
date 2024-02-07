@@ -1,4 +1,4 @@
-pub mod game_time;
+
 
 use std::f32::consts::PI;
 
@@ -30,7 +30,6 @@ pub type WorldSize = [u32; 2];
 pub struct WorldSettings {
     pub world_size: WorldSize,
     pub seed: u32,
-    pub grid_visibility: Visibility,
     pub noise_scale: f64,
     pub noise_amplitude: f64,
 }
@@ -41,7 +40,6 @@ fn init(mut commands: Commands) {
     let world_settings = WorldSettings {
         world_size,
         seed,
-        grid_visibility: Visibility::Visible,
         noise_scale: 0.01,
         noise_amplitude: 10.0,
     };

@@ -38,6 +38,18 @@ pub fn round_even_up(n: u32) -> u32 {
     }
 }
 
+pub fn fast_normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
+    let a = 1.0 / (std_dev * (2.0 * std::f64::consts::PI).sqrt());
+    let b = -0.5 * ((x - mean) / std_dev).powi(2);
+    a * fast_math::exp_raw(b as f32) as f64
+}
+
+pub fn normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
+    let a = 1.0 / (std_dev * (2.0 * std::f64::consts::PI).sqrt());
+    let b = -0.5 * ((x - mean) / std_dev).powi(2);
+    a * b.exp()
+}
+
 pub trait RoundBy {
     fn round_by(self, n: Self) -> Self;
 }

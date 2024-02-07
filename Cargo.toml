@@ -3,6 +3,9 @@ name = "city-builder"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+debug = true
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -28,3 +31,8 @@ float_eq = "1"
 bevy_easings = "0.12.2"
 fnv = "1.0.7"
 ordered-float = "4.2.0"
+bevy_egui = "0.24.0"
+futures-lite = "2.2.0"
+rand_distr = "0.4.3"
+memoize = "0.4.2"
+fast-math = "0.1.1"

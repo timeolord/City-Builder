@@ -8,31 +8,36 @@
 #![allow(clippy::module_name_repetitions)]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
-mod constants;
-mod math_utils;
 mod menu;
+mod utils;
 mod world;
+mod world_gen;
 
 use std::env;
 
 use bevy::prelude::*;
-use constants::DEFAULT_TIMESTEP;
+use bevy_egui::EguiPlugin;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
     #[default]
     MainMenu,
+    WorldGeneration,
     World,
 }
-
 fn main() {
-    let plugins = (DefaultPlugins, menu::MenuPlugin, world::WorldPlugin);
+    let plugins = (
+        menu::MenuPlugin,
+        world::WorldPlugin,
+        world_gen::WorldGenPlugin,
+    );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
     }
     App::new()
         .add_state::<GameState>()
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(EguiPlugin)
         .add_plugins(plugins)
-        .insert_resource(Time::<Fixed>::from_seconds(DEFAULT_TIMESTEP))
         .run();
 }
