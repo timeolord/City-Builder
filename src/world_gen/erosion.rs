@@ -1,21 +1,16 @@
-use bevy::{
-    prelude::*,
-    tasks::{available_parallelism, block_on, AsyncComputeTaskPool, Task},
-    utils::HashMap,
-};
+use bevy::prelude::*;
 
-use bevy_egui::egui::mutex::{Mutex, RwLock};
 use itertools::Itertools;
 
 use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, Uniform};
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
-use crate::utils::math::{fast_normal_curve, normal_curve, AsF32, AsU32};
+use crate::utils::math::{fast_normal_curve, AsF32, AsU32};
 
 use super::{heightmap::Heightmap, HeightmapLoadBar, WorldGenSettings, CHUNK_SIZE};
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Event)]
 pub struct ErosionEvent;
