@@ -12,11 +12,13 @@ mod menu;
 mod utils;
 mod world;
 mod world_gen;
+mod save;
 
 use std::env;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
+use save::initalize_file_structure;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
@@ -26,10 +28,12 @@ enum GameState {
     World,
 }
 fn main() {
+    initalize_file_structure();
     let plugins = (
         menu::MenuPlugin,
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
+        save::SavePlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
@@ -41,3 +45,4 @@ fn main() {
         .add_plugins(plugins)
         .run();
 }
+

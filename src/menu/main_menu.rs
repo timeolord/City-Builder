@@ -18,6 +18,10 @@ fn main_menu(mut game_state: ResMut<NextState<GameState>>, mut contexts: EguiCon
             if ui.add(button).clicked() {
                 game_state.set(GameState::WorldGeneration);
             }
+            let button = egui::Button::new("Load Game").min_size([150.0, 65.0].into());
+            if ui.add(button).clicked() {
+                game_state.set(GameState::World);
+            }
         });
     });
 }

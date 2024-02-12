@@ -4,6 +4,7 @@ use std::f32::consts::PI;
 
 use crate::GameState;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 pub struct WorldPlugin;
 
@@ -26,12 +27,10 @@ struct WorldEntity;
 
 pub type WorldSize = [u32; 2];
 
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone, Copy, Serialize, Deserialize)]
 pub struct WorldSettings {
     pub world_size: WorldSize,
     pub seed: u32,
-    pub noise_scale: f64,
-    pub noise_amplitude: f64,
 }
 
 fn init(mut commands: Commands) {
@@ -40,8 +39,6 @@ fn init(mut commands: Commands) {
     let world_settings = WorldSettings {
         world_size,
         seed,
-        noise_scale: 0.01,
-        noise_amplitude: 10.0,
     };
     commands.insert_resource(world_settings);
 }

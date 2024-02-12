@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use image::{DynamicImage, GrayImage};
 use itertools::Itertools;
 use strum::IntoEnumIterator;
-
+use serde::{Deserialize, Serialize};
 use crate::{
     utils::direction::CardinalDirection,
     utils::math::{AsI32, AsU32},
@@ -14,7 +14,7 @@ use crate::{
 
 use super::CHUNK_SIZE;
 
-#[derive(Resource, Clone, Debug)]
+#[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
     data: Array2D<f64>,
 }

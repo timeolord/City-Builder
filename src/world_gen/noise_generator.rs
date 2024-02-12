@@ -3,6 +3,7 @@ mod circle_noise;
 use itertools::Itertools;
 use noise::*;
 use ordered_float::NotNan;
+use serde::{Deserialize, Serialize};
 
 use crate::world::WorldSize;
 
@@ -30,7 +31,7 @@ where
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub struct NoiseSettings {
     pub seed: u32,
     pub mountain_amount: u32,

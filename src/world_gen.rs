@@ -1,12 +1,15 @@
+use std::fs;
+
 use bevy::{
     prelude::*,
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
+use serde::{Deserialize, Serialize};
 
-mod erosion;
-mod heightmap;
-mod noise_generator;
-use crate::{utils::math::AsF32, GameState};
+pub mod erosion;
+pub mod heightmap;
+pub mod noise_generator;
+use crate::{save::SaveEvent, utils::math::AsF32, GameState};
 
 use self::{
     erosion::{erode_heightmap, ErosionEvent},
@@ -41,7 +44,7 @@ type WorldSize = [u32; 2];
 
 const CHUNK_SIZE: u32 = 64;
 
-#[derive(Resource, Clone, Copy, PartialEq, Eq)]
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldGenSettings {
     world_size: WorldSize,
     noise_settings: NoiseSettings,
@@ -154,6 +157,8 @@ fn display_ui(
     mut world_settings: ResMut<WorldGenSettings>,
     mut seed_string: Local<String>,
     heightmap_load_bar: Res<HeightmapLoadBar>,
+    mut game_state: ResMut<NextState<GameState>>,
+    mut game_save_event: EventWriter<SaveEvent>,
 ) {
     if heightmap.is_changed() {
         *heightmap_image_handle = None;
@@ -236,37 +241,45 @@ fn display_ui(
 
                     ui.label("Erosion");
                     ui.add(
-                        egui::Slider::new(&mut world_settings.erosion_amount, 0..=100)
+                        egui::Slider::new(&mut world_settings.erosion_amount, 0..=1000)
                             .clamp_to_range(true),
                     );
                     ui.end_row();
                 });
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                let button = egui::Button::new("Save Heightmap").min_size([150.0, 65.0].into());
+                if ui.add(button).clicked() {
+                    //TODO add save name
+                    game_save_event.send_default();
+                }
+            });
         });
     egui::SidePanel::right("Heightmap_Image")
         .resizable(false)
         .show(contexts.ctx_mut(), |ui| {
-            ui.with_layout(
-                egui::Layout::top_down(egui::Align::Center),
-                |ui| {
-                    //println!("{}", heightmap_load_bar.progress());
-                    ui.label("Heightmap");
-                    if heightmap_load_bar.heightmap_progress >= 1.0 {
-                        let heightmap_image = egui::Image::new(heightmap_image_handle.unwrap())
-                            .fit_to_exact_size([512.0, 512.0].into());
-                        ui.add(heightmap_image);
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                if heightmap_load_bar.heightmap_progress >= 1.0 {
+                    let heightmap_image = egui::Image::new(heightmap_image_handle.unwrap())
+                        .fit_to_exact_size([512.0, 512.0].into());
+                    ui.add(heightmap_image);
+                }
+                if heightmap_load_bar.progress() < 1.0 {
+                    let mut load_bar =
+                        egui::ProgressBar::new(heightmap_load_bar.progress()).desired_width(512.0);
+                    if heightmap_load_bar.heightmap_progress < 1.0 {
+                        load_bar = load_bar.text("Generating Heightmap");
+                    } else if heightmap_load_bar.erosion_progress < 1.0 {
+                        load_bar = load_bar.text("Eroding Heightmap");
                     }
-                    if heightmap_load_bar.progress() < 1.0 {
-                        let mut load_bar = egui::ProgressBar::new(heightmap_load_bar.progress())
-                                .desired_width(512.0);
-                        if heightmap_load_bar.heightmap_progress < 1.0 {
-                            load_bar = load_bar.text("Generating Heightmap");
+                    ui.add(load_bar);
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        let button = egui::Button::new("New Game").min_size([150.0, 65.0].into());
+                        if ui.add(button).clicked() {
+                            game_state.set(GameState::World);
                         }
-                        else if heightmap_load_bar.erosion_progress < 1.0 {
-                            load_bar = load_bar.text("Eroding Heightmap");
-                        }
-                        ui.add(load_bar);
-                    }
-                },
-            );
+                    });
+                }
+            });
         });
 }
