@@ -1,15 +1,20 @@
-
+use std::path::{Path, PathBuf};
 
 use bevy::{
     prelude::*,
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
+use egui_file::{FileDialog, Filter};
 use serde::{Deserialize, Serialize};
 
 pub mod erosion;
 pub mod heightmap;
 pub mod noise_generator;
-use crate::{save::SaveEvent, utils::math::AsF32, GameState};
+use crate::{
+    save::{save_path, SaveEvent},
+    utils::math::AsF32,
+    GameState,
+};
 
 use self::{
     erosion::{erode_heightmap, ErosionEvent},
@@ -70,8 +75,6 @@ pub struct HeightmapLoadBar {
 impl HeightmapLoadBar {
     pub fn progress(&self) -> f32 {
         (self.heightmap_progress + self.erosion_progress) / 2.0
-        /* self.erosion_progress;
-        self.heightmap_progress */
     }
 }
 
@@ -158,7 +161,8 @@ fn display_ui(
     mut seed_string: Local<String>,
     heightmap_load_bar: Res<HeightmapLoadBar>,
     mut game_state: ResMut<NextState<GameState>>,
-    mut game_save_event: EventWriter<SaveEvent>,
+    mut save_event: EventWriter<SaveEvent>,
+    mut file_dialog: Local<Option<FileDialog>>,
 ) {
     if heightmap.is_changed() {
         *heightmap_image_handle = None;
@@ -177,10 +181,11 @@ fn display_ui(
     if seed_string.is_empty() {
         *seed_string = world_settings.noise_settings.seed.to_string();
     }
+    let ctx = contexts.ctx_mut();
 
     egui::SidePanel::left("World_Gen_Settings")
         .resizable(false)
-        .show(contexts.ctx_mut(), |ui| {
+        .show(ctx, |ui| {
             egui::Grid::new("World_Setting_Menu")
                 .num_columns(2)
                 .show(ui, |ui| {
@@ -249,8 +254,36 @@ fn display_ui(
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 let button = egui::Button::new("Save Heightmap").min_size([150.0, 65.0].into());
                 if ui.add(button).clicked() {
-                    //TODO add save name
-                    game_save_event.send_default();
+                    if file_dialog.is_none() {
+                        let mut dialog = FileDialog::save_file(Some(save_path()))
+                            .show_new_folder(false)
+                            .show_drives(false)
+                            .show_rename(false)
+                            .show_files_filter(Box::new(|str: &Path| {
+                                str.extension().unwrap_or_default() == "save"
+                            }))
+                            .filename_filter(Box::new(|str: &str| !str.contains('.')));
+
+                        dialog.open();
+                        *file_dialog = Some(dialog);
+                    }
+                }
+                if file_dialog.is_some() {
+                    let dialog = file_dialog.as_mut().unwrap();
+                    dialog.show(ctx);
+                    let state = dialog.state();
+                    match state {
+                        egui_file::State::Open => {}
+                        egui_file::State::Closed | egui_file::State::Cancelled => {
+                            *file_dialog = None;
+                        }
+                        egui_file::State::Selected => {
+                            let mut path = PathBuf::from(dialog.path().unwrap());
+                            path.set_extension("save");
+                            let event = SaveEvent(path);
+                            save_event.send(event);
+                        }
+                    }
                 }
             });
         });
