@@ -1,16 +1,16 @@
 use std::ops::{Index, IndexMut};
 
-use array2d::Array2D;
-use bevy::prelude::*;
-use image::{DynamicImage, GrayImage};
-use itertools::Itertools;
-use strum::IntoEnumIterator;
-use serde::{Deserialize, Serialize};
 use crate::{
     utils::direction::CardinalDirection,
     utils::math::{AsI32, AsU32},
     world::WorldSize,
 };
+use array2d::Array2D;
+use bevy::prelude::*;
+use image::{DynamicImage, GrayImage};
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
 use super::CHUNK_SIZE;
 
@@ -49,30 +49,54 @@ impl Heightmap {
             }
         })
     }
-    pub fn get_circle(&self, point: [u32; 2], radius: u32) -> Vec<[u32; 2]> {
-        let [x, y] = point;
-        let radius = radius as i32;
-        let side_length = ((radius * 2) + 1) as usize;
-        let mut result = Vec::with_capacity(side_length * side_length);
-        for dx in -radius..=radius {
-            for dy in -radius..=radius {
-                let neighbour = [x as i32 + dx, y as i32 + dy];
-                if neighbour[0] < self.size()[0] as i32
-                    && neighbour[0].is_positive()
-                    && neighbour[1] < self.size()[1] as i32
-                    && neighbour[1].is_positive()
-                {
-                    result.push(neighbour.as_u32());
-                }
-            }
+    pub fn get_circle(&self, point: [u32; 2], radius: u32) -> HeightmapCircle {
+        HeightmapCircle {
+            center: point.as_i32(),
+            heightmap_size: self.size(),
+            radius,
+            dx: -(radius as i32),
+            dy: -(radius as i32),
         }
-        result
     }
     pub fn as_dynamic_image(self) -> DynamicImage {
         DynamicImage::ImageLuma8(self.clone().into())
     }
     pub fn as_bevy_image(self) -> Image {
         Image::from_dynamic(self.as_dynamic_image(), false)
+    }
+}
+
+pub struct HeightmapCircle {
+    pub center: [i32; 2],
+    pub heightmap_size: WorldSize,
+    pub radius: u32,
+    pub dx: i32,
+    pub dy: i32,
+}
+impl Iterator for HeightmapCircle {
+    type Item = [u32; 2];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let [x, y] = self.center;
+
+        loop {
+            if self.dy > self.radius as i32 {
+                return None;
+            }
+            let neighbour = [x + self.dx, y + self.dy];
+            self.dx += 1;
+            if self.dx > self.radius as i32 {
+                self.dx = -(self.radius as i32);
+                self.dy += 1;
+            }
+            if neighbour[0] < self.heightmap_size[0] as i32
+                && neighbour[0].is_positive()
+                && neighbour[1] < self.heightmap_size[1] as i32
+                && neighbour[1].is_positive()
+            {
+                return Some(neighbour.as_u32());
+            }
+        }
     }
 }
 

@@ -1,10 +1,10 @@
-
-
 use std::f32::consts::PI;
 
 use crate::GameState;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+
+mod mesh_gen;
 
 pub struct WorldPlugin;
 
@@ -36,10 +36,7 @@ pub struct WorldSettings {
 fn init(mut commands: Commands) {
     let world_size = [4, 4];
     let seed: u32 = 0;
-    let world_settings = WorldSettings {
-        world_size,
-        seed,
-    };
+    let world_settings = WorldSettings { world_size, seed };
     commands.insert_resource(world_settings);
 }
 

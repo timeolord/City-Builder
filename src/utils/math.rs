@@ -38,16 +38,24 @@ pub fn round_even_up(n: u32) -> u32 {
     }
 }
 
+#[inline(always)]
 pub fn fast_normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
     let a = 1.0 / (std_dev * (2.0 * std::f64::consts::PI).sqrt());
     let b = -0.5 * ((x - mean) / std_dev).powi(2);
     a * fast_math::exp_raw(b as f32) as f64
 }
 
+#[inline(always)]
 pub fn normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
     let a = 1.0 / (std_dev * (2.0 * std::f64::consts::PI).sqrt());
     let b = -0.5 * ((x - mean) / std_dev).powi(2);
     a * b.exp()
+}
+
+#[inline(always)]
+pub fn fast_normal_approx(a: f64, x: f64) -> f64 {
+    //This function provides a similar drop looking shape to the normal curve, but is much faster to calculate
+    a / (((0.1 * a + 1.0) * a) + x * x)
 }
 
 pub trait RoundBy {

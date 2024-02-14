@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     world::WorldSettings,
-    world_gen::{heightmap::{self, Heightmap}, WorldGenSettings},
+    world_gen::{heightmap::{Heightmap}, WorldGenSettings},
 };
 
 pub fn initalize_file_structure() {

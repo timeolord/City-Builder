@@ -6,11 +6,14 @@ use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, Uniform};
 use std::fmt::Debug;
 
-use crate::utils::math::{fast_normal_curve, AsF32, AsU32};
+use crate::utils::math::{fast_normal_approx, AsF32, AsU32};
 
 use super::{heightmap::Heightmap, HeightmapLoadBar, WorldGenSettings, CHUNK_SIZE};
 
 use std::time::Instant;
+
+pub const MAX_DROPLET_SIZE: u32 = 8;
+pub const MIN_DROPLET_SIZE: u32 = 2;
 
 #[derive(Event)]
 pub struct ErosionEvent;
@@ -22,16 +25,19 @@ pub fn erode_heightmap(
     mut erosion_counter: Local<u32>,
     mut erosion_event: EventReader<ErosionEvent>,
     mut working: Local<bool>,
+    mut benchmark: Local<Option<Instant>>,
 ) {
-    let erosion_chunk_size = 2u32.pow(5);
+    let erosion_chunk_size = 2u32.pow(4);
+    /* let erosion_chunk_size = 1u32; */
     let erosion_chunks = settings.erosion_amount;
-    let max_runtime = 1.0 / 60.0;
+    let max_runtime = 1.0 / 30.0;
     let start_time = Instant::now();
 
     if erosion_event.read().count() > 0 {
         *erosion_counter = erosion_chunks;
         heightmap_load_bar.erosion_progress = 0.0;
         *working = true;
+        *benchmark = Some(Instant::now());
     }
     if *working {
         while (Instant::now() - start_time).as_secs_f64() < max_runtime {
@@ -43,17 +49,22 @@ pub fn erode_heightmap(
                         for y in 0..heightmap.size()[1] {
                             let neighbours = heightmap.get_circle([x, y], 1);
                             let mut sum = 0.0;
-                            for neighbour in neighbours.iter() {
-                                sum += heightmap[*neighbour];
+                            let mut length = 0;
+                            for neighbour in neighbours {
+                                sum += heightmap[neighbour];
+                                length += 1;
                             }
-                            new_heightmap[[x, y]] = sum / neighbours.len() as f64;
+                            new_heightmap[[x, y]] = sum / length as f64;
                         }
                     }
                     *heightmap = new_heightmap;
                 }
-
                 heightmap_load_bar.erosion_progress = 1.0;
                 *working = false;
+                println!(
+                    "Erosion took: {:?}",
+                    Instant::now().duration_since(benchmark.unwrap())
+                );
             } else {
                 let world_size = settings.noise_settings.world_size;
                 let seed = settings.noise_settings.seed;
@@ -61,7 +72,7 @@ pub fn erode_heightmap(
                 let mut rng = StdRng::seed_from_u64((seed + *erosion_counter) as u64);
 
                 let position_sampler = Uniform::new(0, map_size[0]);
-                let radius_sampler = Uniform::new(2u32, 10);
+                let radius_sampler = Uniform::new(MIN_DROPLET_SIZE, MAX_DROPLET_SIZE);
 
                 let positions = (0..erosion_chunk_size)
                     .map(|_| {
@@ -123,13 +134,25 @@ impl<'a> WaterErosion<'a> {
     }
     fn deposit(&mut self, amount: f64) {
         //Deposts sediment in a circle to prevent peaks
-        let std_dev = self.radius as f64 / 2.0;
-        let tiles = self.heightmap.get_circle(self.position, self.radius);
-        for tile in tiles {
-            let distance = Vec2::from_array(self.position.as_f32())
-                .distance(Vec2::from_array(tile.as_f32())) as f64;
-            let deposition_amount = amount * fast_normal_curve(0.0, std_dev, distance);
-            self.heightmap[tile] += deposition_amount;
+        //NOTE: After careful benchmarking, using raw for loops is faster than using iterators from get_circle.
+        let [x, y] = self.position;
+        let radius = self.radius as i32;
+        for dx in -radius..=radius {
+            for dy in -radius..=radius {
+                let neighbour = [x as i32 + dx, y as i32 + dy];
+                if neighbour[0] < self.heightmap.size()[0] as i32
+                    && neighbour[0].is_positive()
+                    && neighbour[1] < self.heightmap.size()[1] as i32
+                    && neighbour[1].is_positive()
+                {
+                    let distance = Vec2::from_array(self.position.as_f32())
+                        .distance(Vec2::from_array(neighbour.as_f32()))
+                        as f64;
+                    let deposition_amount =
+                        amount * fast_normal_approx(self.radius as f64, distance);
+                    self.heightmap[neighbour.as_u32()] += deposition_amount;
+                }
+            }
         }
     }
     fn erode(&mut self, amount: f64) {
@@ -142,11 +165,11 @@ impl<'a> WaterErosion<'a> {
         let debug = false;
         let erosion_speed: f64 = 0.9;
         let gravity = 30.0;
-        let deposition_speed: f64 = 0.5;
+        let deposition_speed: f64 = 0.2;
         let water_evaporation_speed: f64 = 0.0001;
         let minimum_slope = 0.01;
         let direction_inertia = 3.0;
-        let carry_capacity_modifier = 1.0;
+        let carry_capacity_modifier = 2.0;
 
         for _ in 0..MAX_EROSION_STEPS {
             let position = self.position;
@@ -194,7 +217,7 @@ impl<'a> WaterErosion<'a> {
             //Deposition if evaporated or speed is negative
             if self.water < 0.1 || self.speed.is_sign_negative() {
                 self.radius = 50;
-                self.deposit(self.sediment);
+                self.deposit(self.sediment * deposition_speed);
                 if debug {
                     println!("Water Evaporated");
                 }

@@ -4,12 +4,12 @@ use bevy::{
     prelude::*,
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
-use egui_file::{FileDialog, Filter};
+use egui_file::FileDialog;
 use serde::{Deserialize, Serialize};
 
 pub mod erosion;
 pub mod heightmap;
-pub mod noise_generator;
+pub mod noise_gen;
 use crate::{
     save::{save_path, SaveEvent},
     utils::math::AsF32,
@@ -19,7 +19,7 @@ use crate::{
 use self::{
     erosion::{erode_heightmap, ErosionEvent},
     heightmap::Heightmap,
-    noise_generator::{noise_function, NoiseFunction, NoiseSettings},
+    noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{egui, EguiContexts};
 
@@ -47,7 +47,7 @@ impl Plugin for WorldGenPlugin {
 
 type WorldSize = [u32; 2];
 
-const CHUNK_SIZE: u32 = 64;
+const CHUNK_SIZE: u32 = 128;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldGenSettings {
@@ -62,7 +62,7 @@ impl Default for WorldGenSettings {
         Self {
             world_size,
             noise_settings: NoiseSettings::new(world_size),
-            erosion_amount: 50,
+            erosion_amount: 500,
         }
     }
 }
