@@ -3,9 +3,6 @@ use std::f32::consts::PI;
 use crate::GameState;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-
-mod mesh_gen;
-
 pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
@@ -23,24 +20,18 @@ fn exit(mut commands: Commands, query: Query<Entity, With<WorldEntity>>) {
 }
 
 #[derive(Component)]
-struct WorldEntity;
+pub struct WorldEntity;
 
 pub type WorldSize = [u32; 2];
 
-#[derive(Resource, Clone, Copy, Serialize, Deserialize)]
-pub struct WorldSettings {
-    pub world_size: WorldSize,
-    pub seed: u32,
-}
-
 fn init(mut commands: Commands) {
-    let world_size = [4, 4];
+    /* let world_size = [4, 4];
     let seed: u32 = 0;
     let world_settings = WorldSettings { world_size, seed };
-    commands.insert_resource(world_settings);
+    commands.insert_resource(world_settings); */
 }
 
-fn setup(mut commands: Commands, _world_settings: Res<WorldSettings>) {
+fn setup(mut commands: Commands) {
     // Sun
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {

@@ -8,11 +8,12 @@
 #![allow(clippy::module_name_repetitions)]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
+mod camera;
 mod menu;
+mod save;
 mod utils;
 mod world;
 mod world_gen;
-mod save;
 
 use std::env;
 
@@ -30,10 +31,11 @@ enum GameState {
 fn main() {
     initalize_file_structure();
     let plugins = (
+        camera::CameraPlugin,
         menu::MenuPlugin,
+        save::SavePlugin,
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
-        save::SavePlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
@@ -45,4 +47,3 @@ fn main() {
         .add_plugins(plugins)
         .run();
 }
-

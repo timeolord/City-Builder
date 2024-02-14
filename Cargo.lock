@@ -1389,7 +1389,6 @@ dependencies = [
  "rayon",
  "ron",
  "serde",
- "smallvec",
  "smooth-bevy-cameras",
  "strict-num",
  "strum",

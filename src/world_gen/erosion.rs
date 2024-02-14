@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 use crate::utils::math::{fast_normal_approx, AsF32, AsU32};
 
-use super::{heightmap::Heightmap, HeightmapLoadBar, WorldGenSettings, CHUNK_SIZE};
+use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, CHUNK_SIZE};
 
 use std::time::Instant;
 
@@ -20,7 +20,7 @@ pub struct ErosionEvent;
 
 pub fn erode_heightmap(
     mut heightmap: ResMut<Heightmap>,
-    settings: Res<WorldGenSettings>,
+    settings: Res<WorldSettings>,
     mut heightmap_load_bar: ResMut<HeightmapLoadBar>,
     mut erosion_counter: Local<u32>,
     mut erosion_event: EventReader<ErosionEvent>,

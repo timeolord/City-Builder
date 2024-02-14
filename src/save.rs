@@ -3,10 +3,7 @@ use std::{env, fs, path::PathBuf};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    world::WorldSettings,
-    world_gen::{heightmap::{Heightmap}, WorldGenSettings},
-};
+use crate::world_gen::{heightmap::Heightmap, WorldSettings};
 
 pub fn initalize_file_structure() {
     std::fs::create_dir_all(save_path()).unwrap();
@@ -21,8 +18,7 @@ pub fn save_path() -> PathBuf {
 #[derive(Serialize, Deserialize)]
 pub struct SaveFile {
     heightmap: Heightmap,
-    world_settings: WorldSettings,
-    world_gen_settings: WorldGenSettings,
+    world_gen_settings: WorldSettings,
 }
 
 #[derive(Event)]
@@ -43,18 +39,15 @@ impl Plugin for SavePlugin {
 
 pub fn save_file(
     heightmap: Option<Res<Heightmap>>,
-    world_settings: Option<Res<WorldSettings>>,
-    world_gen_settings: Option<Res<WorldGenSettings>>,
+    world_gen_settings: Option<Res<WorldSettings>>,
     mut save_event: EventReader<SaveEvent>,
 ) {
     for event in save_event.read() {
         let heightmap = (*heightmap.as_ref().unwrap()).clone();
-        let world_settings = (*world_settings.as_ref().unwrap()).clone();
         let world_gen_settings = (*world_gen_settings.as_ref().unwrap()).clone();
 
         let save = SaveFile {
             heightmap,
-            world_settings,
             world_gen_settings,
         };
         let path = save_path().join(&event.0);
@@ -62,16 +55,12 @@ pub fn save_file(
     }
 }
 
-pub fn load_file(
-    mut commands: Commands,
-    mut load_event: EventReader<LoadEvent>,
-) {
+pub fn load_file(mut commands: Commands, mut load_event: EventReader<LoadEvent>) {
     for event in load_event.read() {
         let path = save_path().join(&event.0);
         let save: SaveFile = ron::from_str(&fs::read_to_string(path).unwrap()).unwrap();
 
         commands.insert_resource(save.heightmap.clone());
-        commands.insert_resource(save.world_settings.clone());
         commands.insert_resource(save.world_gen_settings.clone());
     }
 }

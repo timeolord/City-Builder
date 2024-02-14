@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 
 pub mod erosion;
 pub mod heightmap;
+pub mod mesh_gen;
 pub mod noise_gen;
+
 use crate::{
     save::{save_path, SaveEvent},
     utils::math::AsF32,
@@ -19,6 +21,7 @@ use crate::{
 use self::{
     erosion::{erode_heightmap, ErosionEvent},
     heightmap::Heightmap,
+    mesh_gen::generate_world_mesh,
     noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{egui, EguiContexts};
@@ -38,7 +41,12 @@ impl Plugin for WorldGenPlugin {
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
-            (generate_heightmap, erode_heightmap, display_ui)
+            (
+                generate_heightmap,
+                erode_heightmap,
+                generate_world_mesh,
+                display_ui,
+            )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
@@ -50,13 +58,13 @@ type WorldSize = [u32; 2];
 const CHUNK_SIZE: u32 = 128;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WorldGenSettings {
+pub struct WorldSettings {
     world_size: WorldSize,
     noise_settings: NoiseSettings,
     erosion_amount: u32,
 }
 
-impl Default for WorldGenSettings {
+impl Default for WorldSettings {
     fn default() -> Self {
         let world_size = [8, 8];
         Self {
@@ -79,18 +87,20 @@ impl HeightmapLoadBar {
 }
 
 fn init(mut commands: Commands) {
-    commands.init_resource::<WorldGenSettings>();
-    commands.insert_resource(Heightmap::new(WorldGenSettings::default().world_size));
+    commands.init_resource::<WorldSettings>();
+    commands.insert_resource(Heightmap::new(WorldSettings::default().world_size));
     commands.init_resource::<HeightmapLoadBar>();
 }
 
-fn exit() {}
+fn exit(mut commands: Commands) {
+    commands.remove_resource::<HeightmapLoadBar>();
+}
 
 fn generate_heightmap(
     mut heightmap: ResMut<Heightmap>,
-    world_settings: Res<WorldGenSettings>,
+    world_settings: Res<WorldSettings>,
     mut tasks: Local<Vec<Task<Vec<([u32; 2], f64)>>>>,
-    mut previous_world_settings: Local<Option<WorldGenSettings>>,
+    mut previous_world_settings: Local<Option<WorldSettings>>,
     mut heightmap_load_bar: ResMut<HeightmapLoadBar>,
     mut erosion_event: EventWriter<ErosionEvent>,
     mut working: Local<bool>,
@@ -157,7 +167,7 @@ fn display_ui(
     heightmap: Res<Heightmap>,
     mut contexts: EguiContexts,
     mut heightmap_image_handle: Local<Option<egui::load::SizedTexture>>,
-    mut world_settings: ResMut<WorldGenSettings>,
+    mut world_settings: ResMut<WorldSettings>,
     mut seed_string: Local<String>,
     heightmap_load_bar: Res<HeightmapLoadBar>,
     mut game_state: ResMut<NextState<GameState>>,
@@ -261,8 +271,7 @@ fn display_ui(
                             .show_rename(false)
                             .show_files_filter(Box::new(|str: &Path| {
                                 str.extension().unwrap_or_default() == "save"
-                            }))
-                            .filename_filter(Box::new(|str: &str| !str.contains('.')));
+                            }));
 
                         dialog.open();
                         *file_dialog = Some(dialog);
