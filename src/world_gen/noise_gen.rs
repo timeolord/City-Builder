@@ -37,8 +37,6 @@ pub struct NoiseSettings {
     pub mountain_amount: u32,
     pub mountain_size: f64,
     pub hilliness: f64,
-    pub noise_scale: f64,
-    pub noise_amplitude: f64,
     pub world_size: WorldSize,
 }
 
@@ -57,8 +55,6 @@ impl PartialEq for NoiseSettings {
             && self.mountain_amount == other.mountain_amount
             && NotNan::new(self.mountain_size) == NotNan::new(other.mountain_size)
             && NotNan::new(self.hilliness) == NotNan::new(other.hilliness)
-            && NotNan::new(self.noise_scale) == NotNan::new(other.noise_scale)
-            && NotNan::new(self.noise_amplitude) == NotNan::new(other.noise_amplitude)
     }
 }
 impl Eq for NoiseSettings {}
@@ -70,8 +66,6 @@ impl Default for NoiseSettings {
             mountain_amount: 1,
             mountain_size: 100.0,
             hilliness: 0.5,
-            noise_scale: 0.01,
-            noise_amplitude: 10.0,
             world_size: [0, 0],
         }
     }

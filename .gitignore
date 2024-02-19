@@ -1,3 +1,6 @@
 /target
 /old_version
 old_version
+*.etl
+/*.etl*
+flamegraph.svg

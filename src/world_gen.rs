@@ -24,11 +24,14 @@ use self::{
     mesh_gen::generate_world_mesh,
     noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{
+    egui::{self, TextureId},
+    EguiContexts,
+};
 
 //Steps of world gen:
 // 1. Generate height map # DONE
-// 2. Generate mesh from height map
+// 2. Generate mesh from height map # DONE
 // 2a. Generate water mesh from height map
 // 3. Generate ground textures from height map
 // 4. Spawn trees
@@ -49,25 +52,24 @@ impl Plugin for WorldGenPlugin {
             generate_world_mesh.run_if(in_state(GameState::World)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
-        app.add_systems(OnExit(GameState::World), generate_world_mesh);
     }
 }
 
 type WorldSize = [u32; 2];
 
-const CHUNK_SIZE: u32 = 128;
-const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
+pub const CHUNK_SIZE: u32 = 128;
+pub const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {
-    world_size: WorldSize,
-    noise_settings: NoiseSettings,
-    erosion_amount: u32,
+    pub world_size: WorldSize,
+    pub noise_settings: NoiseSettings,
+    pub erosion_amount: u32,
 }
 
 impl Default for WorldSettings {
     fn default() -> Self {
-        let world_size = [8, 8];
+        let world_size = [16, 16];
         Self {
             world_size,
             noise_settings: NoiseSettings::new(world_size),
@@ -168,7 +170,8 @@ fn display_ui(
     mut asset_server: ResMut<Assets<Image>>,
     heightmap: Res<Heightmap>,
     mut contexts: EguiContexts,
-    mut heightmap_image_handle: Local<Option<egui::load::SizedTexture>>,
+    mut bevy_heightmap_image_handle: Local<Option<Handle<Image>>>,
+    mut egui_heightmap_image_handle: Local<Option<TextureId>>,
     mut world_settings: ResMut<WorldSettings>,
     mut seed_string: Local<String>,
     heightmap_load_bar: Res<HeightmapLoadBar>,
@@ -176,18 +179,24 @@ fn display_ui(
     mut save_event: EventWriter<SaveEvent>,
     mut file_dialog: Local<Option<FileDialog>>,
 ) {
-    if heightmap.is_changed() {
-        *heightmap_image_handle = None;
-    }
-
-    if heightmap_image_handle.is_none() {
+    if bevy_heightmap_image_handle.is_none() || egui_heightmap_image_handle.is_none() {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server.add(heightmap_image);
+        *bevy_heightmap_image_handle = Some(heightmap_bevy_handle.clone());
         let heightmap_egui_handle = contexts.add_image(heightmap_bevy_handle);
-        *heightmap_image_handle = Some(egui::load::SizedTexture::new(
+        *egui_heightmap_image_handle = Some(heightmap_egui_handle);
+        /* *heightmap_image_handle = Some(egui::load::SizedTexture::new(
             heightmap_egui_handle,
             heightmap.size().as_f32(),
-        ));
+        )); */
+    }
+
+    if heightmap.is_changed() {
+        let heightmap_image = heightmap.clone().as_bevy_image();
+        let heightmap_bevy_handle = asset_server
+            .get_mut(bevy_heightmap_image_handle.as_ref().unwrap().clone())
+            .unwrap();
+        *heightmap_bevy_handle = heightmap_image;
     }
 
     if seed_string.is_empty() {
@@ -217,16 +226,6 @@ fn display_ui(
                             }
                         }
                     }
-                    ui.end_row();
-
-                    ui.label("Noise Scale");
-                    ui.add(
-                        egui::Slider::new(
-                            &mut world_settings.noise_settings.noise_scale,
-                            0.0..=0.01,
-                        )
-                        .clamp_to_range(true),
-                    );
                     ui.end_row();
 
                     ui.label("Hilliness");
@@ -305,8 +304,11 @@ fn display_ui(
         .show(contexts.ctx_mut(), |ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 if heightmap_load_bar.heightmap_progress >= 1.0 {
-                    let heightmap_image = egui::Image::new(heightmap_image_handle.unwrap())
-                        .fit_to_exact_size([512.0, 512.0].into());
+                    let heightmap_image = egui::Image::new(egui::load::SizedTexture::new(
+                        egui_heightmap_image_handle.unwrap(),
+                        heightmap.size().as_f32(),
+                    ))
+                    .fit_to_exact_size([512.0, 512.0].into());
                     ui.add(heightmap_image);
                 }
                 if heightmap_load_bar.progress() < 1.0 {

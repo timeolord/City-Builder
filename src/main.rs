@@ -6,6 +6,7 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::module_name_repetitions)]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
 mod camera;
@@ -19,7 +20,6 @@ use std::env;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
-use save::initalize_file_structure;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
@@ -28,8 +28,10 @@ enum GameState {
     WorldGeneration,
     World,
 }
+
+pub const DEBUG: bool = cfg!(debug_assertions);
+
 fn main() {
-    initalize_file_structure();
     let plugins = (
         camera::CameraPlugin,
         menu::MenuPlugin,
@@ -46,4 +48,5 @@ fn main() {
         .add_plugins(EguiPlugin)
         .add_plugins(plugins)
         .run();
+    println!("Hello, world!");
 }

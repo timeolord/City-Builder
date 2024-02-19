@@ -2,9 +2,11 @@ use bevy::{
     prelude::*,
     render::{mesh::Indices, render_resource::PrimitiveTopology},
 };
+use bevy_mod_raycast::deferred::RaycastMesh;
 
 use crate::{
-    utils::math::unnormalized_normal_array, world::WorldEntity, world_gen::heightmap::Heightmap,
+    camera::CameraRaycastSet, utils::math::unnormalized_normal_array, world::WorldEntity,
+    world_gen::heightmap::Heightmap,
 };
 #[derive(Component)]
 pub struct WorldMesh;
@@ -41,10 +43,7 @@ pub fn generate_world_mesh(
                 for y in 0..CHUNK_SIZE {
                     for x in 0..CHUNK_SIZE {
                         let (new_vertices, uv, index, normal) = create_attributes(
-                            [
-                                (chunk_x * CHUNK_SIZE) + x,
-                                (chunk_y * CHUNK_SIZE) + y,
-                            ],
+                            [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
                             &heightmap,
                         );
                         vertices.extend(new_vertices);
@@ -71,7 +70,8 @@ pub fn generate_world_mesh(
                         ..Default::default()
                     })
                     .insert(WorldMesh)
-                    .insert(WorldEntity);
+                    .insert(WorldEntity)
+                    .insert(RaycastMesh::<CameraRaycastSet>::default());
             }
         }
     }
@@ -139,30 +139,4 @@ fn create_attributes(starting_position: [u32; 2], heightmap: &Heightmap) -> Mesh
         .to_array();
     let normals = vec![normal_a, normal_a, normal_a, normal_a];
     (vertices, uv, indices, normals)
-}
-
-pub fn create_chunk_mesh(heightmap: &Heightmap) -> Mesh {
-    let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
-
-    let mut vertices = Vec::new();
-    let mut uvs = Vec::new();
-    let mut indices = Vec::new();
-    let mut normals = Vec::new();
-    for y in 0..CHUNK_SIZE as u32 {
-        for x in 0..CHUNK_SIZE as u32 {
-            let (new_vertices, uv, index, normal) = create_attributes([x, y], heightmap);
-            vertices.extend(new_vertices);
-            uvs.extend(uv);
-            indices.extend(index);
-            normals.extend(normal);
-        }
-    }
-
-    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-
-    grid_mesh.set_indices(Some(Indices::U32(indices)));
-
-    grid_mesh
 }

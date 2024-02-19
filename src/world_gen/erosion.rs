@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 use crate::utils::math::{fast_normal_approx, AsF32, AsU32};
 
-use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
+use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, HEIGHTMAP_CHUNK_SIZE};
 
 use std::time::Instant;
 
