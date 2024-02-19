@@ -29,7 +29,7 @@ enum GameState {
     World,
 }
 
-pub const DEBUG: bool = cfg!(debug_assertions);
+pub const DEBUG: bool = true;
 
 fn main() {
     let plugins = (

@@ -178,25 +178,25 @@ fn display_ui(
     mut game_state: ResMut<NextState<GameState>>,
     mut save_event: EventWriter<SaveEvent>,
     mut file_dialog: Local<Option<FileDialog>>,
+    mut frame_counter: Local<u8>,
 ) {
+    *frame_counter += 1;
     if bevy_heightmap_image_handle.is_none() || egui_heightmap_image_handle.is_none() {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server.add(heightmap_image);
         *bevy_heightmap_image_handle = Some(heightmap_bevy_handle.clone());
         let heightmap_egui_handle = contexts.add_image(heightmap_bevy_handle);
         *egui_heightmap_image_handle = Some(heightmap_egui_handle);
-        /* *heightmap_image_handle = Some(egui::load::SizedTexture::new(
-            heightmap_egui_handle,
-            heightmap.size().as_f32(),
-        )); */
     }
 
-    if heightmap.is_changed() {
+    //Update the image if the heightmap has changed every 10 frames
+    if heightmap.is_changed() && (*frame_counter > 30 || heightmap_load_bar.progress() >= 1.0) {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server
             .get_mut(bevy_heightmap_image_handle.as_ref().unwrap().clone())
             .unwrap();
         *heightmap_bevy_handle = heightmap_image;
+        *frame_counter = 0;
     }
 
     if seed_string.is_empty() {

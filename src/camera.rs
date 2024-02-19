@@ -35,7 +35,6 @@ impl Plugin for CameraPlugin {
             LookTransformPlugin,
         ));
         app.add_plugins(DeferredRaycastingPlugin::<CameraRaycastSet>::default());
-        app.insert_resource(RaycastPluginState::<CameraRaycastSet>::default().with_debug_cursor());
         app.add_systems(OnEnter(GameState::World), setup);
         app.add_systems(
             Update,
@@ -47,7 +46,7 @@ impl Plugin for CameraPlugin {
 }
 
 #[derive(Component)]
-struct TerrainRaycaster;
+pub struct TerrainRaycaster;
 
 pub fn input(
     mut events: EventWriter<ControlEvent>,
@@ -57,6 +56,7 @@ pub fn input(
     keyboard: Res<Input<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
+    terrain_raycaster: Query<&RaycastSource<CameraRaycastSet>, With<TerrainRaycaster>>,
     world_settings: Res<WorldSettings>,
     mut gizmos: Gizmos,
 ) {
@@ -83,11 +83,14 @@ pub fn input(
         cursor_delta += event.delta;
     }
 
-    //World Camera
-    /* let height = heightmaps.get_from_world_position(transform.target).y;
-    transform.target.y = height + CAMERA_TERRAIN_OFFSET; */
-    /* let ray = Ray3d::new(transform.eye, Vec3::Y);
-    let hits = raycast.cast_ray(ray, &RaycastSettings::default()); */
+    //Sets the height of the camera to the terrain
+    if let Ok(raycaster) = terrain_raycaster.get_single() {
+        raycaster.intersections().first().map(|(_, intersection)| {
+            let height_delta = intersection.position().y - transform.target.y;
+            transform.target.y += height_delta;
+            transform.eye.y += height_delta;
+        });
+    }
 
     if mouse_buttons.pressed(MouseButton::Middle) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
@@ -159,7 +162,7 @@ pub fn input(
     transform.eye = transform.target + eye_delta;
 
     if DEBUG {
-        gizmos.sphere(transform.target, Quat::IDENTITY, 1.0, Color::RED);
+        gizmos.sphere(transform.target, Quat::IDENTITY, 0.1, Color::RED);
     }
 
     // Zoom

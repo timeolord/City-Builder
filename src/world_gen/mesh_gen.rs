@@ -14,7 +14,7 @@ pub struct WorldMesh;
 use super::{WorldSettings, CHUNK_SIZE};
 
 pub const TILE_SIZE: f32 = 1.0;
-pub const WORLD_HEIGHT_SCALE: f32 = 100.0;
+pub const WORLD_HEIGHT_SCALE: f32 = 200.0;
 
 pub fn generate_world_mesh(
     mut commands: Commands,
