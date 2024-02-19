@@ -7,10 +7,9 @@ use rand::{
     SeedableRng,
 };
 
-
 use crate::{
     utils::math::{normal_curve, AsF32},
-    world_gen::{WorldSize, CHUNK_SIZE},
+    world_gen::{WorldSize, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE},
 };
 use rand_distr::Normal;
 
@@ -44,8 +43,8 @@ impl Circle {
 impl CircleNoise {
     pub fn new(seed: u32, amount: u32, size: f64, world_size: WorldSize, std_dev: f64) -> Self {
         let map_size = [
-            (world_size[0] * CHUNK_SIZE) as f64,
-            (world_size[1] * CHUNK_SIZE) as f64,
+            (world_size[0] * HEIGHTMAP_CHUNK_SIZE) as f64,
+            (world_size[1] * HEIGHTMAP_CHUNK_SIZE) as f64,
         ];
         let mut rng = StdRng::seed_from_u64(seed as u64);
         //The x and y positions are uniformally distributed, with 5% margins

@@ -8,7 +8,7 @@ use std::fmt::Debug;
 
 use crate::utils::math::{fast_normal_approx, AsF32, AsU32};
 
-use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, CHUNK_SIZE};
+use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
 use std::time::Instant;
 
@@ -68,7 +68,10 @@ pub fn erode_heightmap(
             } else {
                 let world_size = settings.noise_settings.world_size;
                 let seed = settings.noise_settings.seed;
-                let map_size = [(world_size[0] * CHUNK_SIZE), (world_size[1] * CHUNK_SIZE)];
+                let map_size = [
+                    (world_size[0] * HEIGHTMAP_CHUNK_SIZE),
+                    (world_size[1] * HEIGHTMAP_CHUNK_SIZE),
+                ];
                 let mut rng = StdRng::seed_from_u64((seed + *erosion_counter) as u64);
 
                 let position_sampler = Uniform::new(0, map_size[0]);

@@ -41,21 +41,22 @@ impl Plugin for WorldGenPlugin {
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
-            (
-                generate_heightmap,
-                erode_heightmap,
-                generate_world_mesh,
-                display_ui,
-            )
+            (generate_heightmap, erode_heightmap, display_ui)
                 .run_if(in_state(GameState::WorldGeneration)),
         );
+        app.add_systems(
+            Update,
+            generate_world_mesh.run_if(in_state(GameState::World)),
+        );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
+        app.add_systems(OnExit(GameState::World), generate_world_mesh);
     }
 }
 
 type WorldSize = [u32; 2];
 
 const CHUNK_SIZE: u32 = 128;
+const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {
@@ -143,11 +144,12 @@ fn generate_heightmap(
             for chunk_x in 0..world_size[1] {
                 let task = thread_pool.spawn(async move {
                     let perlin = noise_function(noise_settings);
-                    let mut results = Vec::with_capacity((CHUNK_SIZE * CHUNK_SIZE) as usize);
-                    for x in 0..CHUNK_SIZE {
-                        for y in 0..CHUNK_SIZE {
-                            let x = x + chunk_x * CHUNK_SIZE;
-                            let y = y + chunk_y * CHUNK_SIZE;
+                    let mut results =
+                        Vec::with_capacity((HEIGHTMAP_CHUNK_SIZE * HEIGHTMAP_CHUNK_SIZE) as usize);
+                    for x in 0..HEIGHTMAP_CHUNK_SIZE {
+                        for y in 0..HEIGHTMAP_CHUNK_SIZE {
+                            let x = x + chunk_x * HEIGHTMAP_CHUNK_SIZE;
+                            let y = y + chunk_y * HEIGHTMAP_CHUNK_SIZE;
                             let result = ([x, y], perlin.get([x, y]));
                             results.push(result);
                         }
@@ -261,40 +263,42 @@ fn display_ui(
                     );
                     ui.end_row();
                 });
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                let button = egui::Button::new("Save Heightmap").min_size([150.0, 65.0].into());
-                if ui.add(button).clicked() {
-                    if file_dialog.is_none() {
-                        let mut dialog = FileDialog::save_file(Some(save_path()))
-                            .show_new_folder(false)
-                            .show_drives(false)
-                            .show_rename(false)
-                            .show_files_filter(Box::new(|str: &Path| {
-                                str.extension().unwrap_or_default() == "save"
-                            }));
+            if heightmap_load_bar.progress() >= 1.0 {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    let button = egui::Button::new("Save Heightmap").min_size([150.0, 65.0].into());
+                    if ui.add(button).clicked() {
+                        if file_dialog.is_none() {
+                            let mut dialog = FileDialog::save_file(Some(save_path()))
+                                .show_new_folder(false)
+                                .show_drives(false)
+                                .show_rename(false)
+                                .show_files_filter(Box::new(|str: &Path| {
+                                    str.extension().unwrap_or_default() == "save"
+                                }));
 
-                        dialog.open();
-                        *file_dialog = Some(dialog);
-                    }
-                }
-                if file_dialog.is_some() {
-                    let dialog = file_dialog.as_mut().unwrap();
-                    dialog.show(ctx);
-                    let state = dialog.state();
-                    match state {
-                        egui_file::State::Open => {}
-                        egui_file::State::Closed | egui_file::State::Cancelled => {
-                            *file_dialog = None;
-                        }
-                        egui_file::State::Selected => {
-                            let mut path = PathBuf::from(dialog.path().unwrap());
-                            path.set_extension("save");
-                            let event = SaveEvent(path);
-                            save_event.send(event);
+                            dialog.open();
+                            *file_dialog = Some(dialog);
                         }
                     }
-                }
-            });
+                    if file_dialog.is_some() {
+                        let dialog = file_dialog.as_mut().unwrap();
+                        dialog.show(ctx);
+                        let state = dialog.state();
+                        match state {
+                            egui_file::State::Open => {}
+                            egui_file::State::Closed | egui_file::State::Cancelled => {
+                                *file_dialog = None;
+                            }
+                            egui_file::State::Selected => {
+                                let mut path = PathBuf::from(dialog.path().unwrap());
+                                path.set_extension("save");
+                                let event = SaveEvent(path);
+                                save_event.send(event);
+                            }
+                        }
+                    }
+                });
+            }
         });
     egui::SidePanel::right("Heightmap_Image")
         .resizable(false)

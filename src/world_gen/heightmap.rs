@@ -12,7 +12,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::CHUNK_SIZE;
+use super::{CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
@@ -24,8 +24,8 @@ impl Heightmap {
         Self {
             data: Array2D::filled_with(
                 0.0,
-                (size[0] * CHUNK_SIZE as u32) as usize,
-                (size[1] * CHUNK_SIZE as u32) as usize,
+                (size[0] * HEIGHTMAP_CHUNK_SIZE as u32) as usize,
+                (size[1] * HEIGHTMAP_CHUNK_SIZE as u32) as usize,
             ),
         }
     }

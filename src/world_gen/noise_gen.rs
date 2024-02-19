@@ -86,7 +86,7 @@ pub fn noise_function(settings: NoiseSettings) -> impl NoiseFunction {
     let hilliness = settings.hilliness;
     let mountain_size = settings.mountain_size;
 
-    let octaves: usize = 10;
+    let octaves: usize = 4;
     let sources = (0..octaves)
         .into_iter()
         .map(|i| Perlin::new(seed.wrapping_add(i as u32)))
@@ -101,7 +101,7 @@ pub fn noise_function(settings: NoiseSettings) -> impl NoiseFunction {
     let base_terrain_noise = Fbm::new(seed)
         .set_octaves(octaves)
         .set_sources(sources.clone());
-    let base_terrain_noise = ScalePoint::new(base_terrain_noise).set_scale(0.003);
+    let base_terrain_noise = ScalePoint::new(base_terrain_noise).set_scale(0.001);
     let base_terrain_noise = ScaleBias::new(base_terrain_noise)
         .set_scale(hilliness)
         .set_bias(-0.7);
