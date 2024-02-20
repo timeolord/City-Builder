@@ -273,7 +273,8 @@ fn display_ui(
                                 .show_files_filter(Box::new(|str: &Path| {
                                     str.extension().unwrap_or_default() == "save"
                                 }));
-                            if cfg!(windows) {
+                            #[cfg(windows)]
+                            {
                                 dialog = dialog.show_drives(false);
                             }
 
