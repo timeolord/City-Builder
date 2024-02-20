@@ -23,7 +23,7 @@ pub struct WorldEntity;
 
 pub type WorldSize = [u32; 2];
 
-fn init(mut commands: Commands) {
+fn init(_commands: Commands) {
     /* let world_size = [4, 4];
     let seed: u32 = 0;
     let world_settings = WorldSettings { world_size, seed };

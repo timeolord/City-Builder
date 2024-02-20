@@ -9,7 +9,7 @@ use rand::{
 
 use crate::{
     utils::math::{normal_curve, AsF32},
-    world_gen::{WorldSize, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE},
+    world_gen::{WorldSize, HEIGHTMAP_CHUNK_SIZE},
 };
 use rand_distr::Normal;
 

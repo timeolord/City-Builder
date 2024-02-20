@@ -12,7 +12,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
+use super::HEIGHTMAP_CHUNK_SIZE;
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
@@ -103,7 +103,6 @@ impl Iterator for HeightmapCircle {
 impl From<Heightmap> for GrayImage {
     fn from(heightmap: Heightmap) -> Self {
         let [width, height] = heightmap.size();
-        //println!("{}", heightmap.data.as_column_major().iter().max().unwrap());
         GrayImage::from_raw(
             width,
             height,

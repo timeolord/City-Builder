@@ -1,13 +1,12 @@
 use bevy::{
     prelude::*,
-    render::{mesh::Indices, render_resource::PrimitiveTopology, texture},
+    render::{mesh::Indices, render_resource::PrimitiveTopology},
 };
 use bevy_mod_raycast::deferred::RaycastMesh;
-use enum_map::EnumMap;
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
 
 use crate::{
-    assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainTextures, TerrainType},
+    assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainType},
     camera::CameraRaycastSet,
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
@@ -39,8 +38,6 @@ pub fn generate_world_mesh(
         for chunk_y in 0..world_size[0] {
             for chunk_x in 0..world_size[1] {
                 let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
-
-                /* let terrain_meshes: EnumMap<TerrainType, ()> = EnumMap::default(); */
 
                 let mut vertices = Vec::new();
                 let mut uvs = Vec::new();
@@ -83,10 +80,6 @@ pub fn generate_world_mesh(
         }
     }
 }
-
-/* fn assign_materials(terrain_textures: &TerrainTextures, normal_vectors: ) -> Handle<StandardMaterial> {
-
-} */
 
 type MeshVecs = (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>);
 

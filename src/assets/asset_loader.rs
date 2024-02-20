@@ -2,7 +2,7 @@ use std::path::Path;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use image::{DynamicImage, RgbImage, RgbaImage};
+use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
 use strum::IntoEnumIterator;
 

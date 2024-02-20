@@ -2,12 +2,7 @@ use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
 };
-use bevy_mod_raycast::{
-    deferred::{DeferredRaycastingPlugin, RaycastPluginState},
-    immediate::{Raycast, RaycastSettings},
-    prelude::RaycastSource,
-    primitives::Ray3d,
-};
+use bevy_mod_raycast::{deferred::DeferredRaycastingPlugin, prelude::RaycastSource};
 use smooth_bevy_cameras::{
     controllers::orbit::{
         ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
@@ -72,7 +67,7 @@ pub fn input(
 
     let OrbitCameraController {
         mouse_rotate_sensitivity,
-        mouse_translate_sensitivity,
+
         mouse_wheel_zoom_sensitivity,
         pixels_per_line,
         ..
