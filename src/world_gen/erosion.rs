@@ -40,6 +40,10 @@ pub fn erode_heightmap(
         *benchmark = Some(Instant::now());
     }
     if *working {
+        #[cfg(linux)] {
+        coz::scope!("erode_heightmap");
+
+        }
         while (Instant::now() - start_time).as_secs_f64() < max_runtime {
             if *erosion_counter == 0 {
                 //Blur the heightmap
@@ -94,6 +98,9 @@ pub fn erode_heightmap(
                 });
                 heightmap_load_bar.erosion_progress += 1.0 / erosion_chunks as f32;
                 *erosion_counter = erosion_counter.saturating_sub(1);
+                #[cfg(linux)] {
+                coz::progress!(); 
+                }
             }
         }
     }
