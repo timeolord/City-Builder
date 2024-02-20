@@ -9,6 +9,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
+mod assets;
 mod camera;
 mod menu;
 mod save;
@@ -16,20 +17,21 @@ mod utils;
 mod world;
 mod world_gen;
 
-use std::env;
-
-use bevy::prelude::*;
+use crate::assets::asset_loader;
+use bevy::{core::TaskPoolThreadAssignmentPolicy, prelude::*};
 use bevy_egui::EguiPlugin;
+use std::env;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
     #[default]
+    AssetLoading,
     MainMenu,
     WorldGeneration,
     World,
 }
 
-pub const DEBUG: bool = true;
+pub const DEBUG: bool = cfg!(debug_assertions);
 
 fn main() {
     let plugins = (
@@ -38,13 +40,38 @@ fn main() {
         save::SavePlugin,
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
+        asset_loader::AssetLoaderPlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
     }
     App::new()
         .add_state::<GameState>()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(TaskPoolPlugin {
+                    task_pool_options: TaskPoolOptions {
+                        min_total_threads: 1,
+                        max_total_threads: usize::MAX,
+                        io: TaskPoolThreadAssignmentPolicy {
+                            min_threads: 1,
+                            max_threads: 1,
+                            percent: 0.0,
+                        },
+                        compute: TaskPoolThreadAssignmentPolicy {
+                            min_threads: 1,
+                            max_threads: usize::MAX,
+                            percent: 0.25,
+                        },
+                        async_compute: TaskPoolThreadAssignmentPolicy {
+                            min_threads: 1,
+                            max_threads: usize::MAX,
+                            percent: 0.75,
+                        },
+                    },
+                }),
+        )
         .add_plugins(EguiPlugin)
         .add_plugins(plugins)
         .run();

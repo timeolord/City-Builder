@@ -1,6 +1,6 @@
 use bevy::{
     prelude::*,
-    render::{mesh::Indices, render_resource::PrimitiveTopology},
+    render::{mesh::Indices, render_resource::PrimitiveTopology, texture},
 };
 use bevy_mod_raycast::deferred::RaycastMesh;
 
@@ -23,6 +23,7 @@ pub fn generate_world_mesh(
     world_settings: Res<WorldSettings>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     if world_mesh_query.is_empty() || heightmap.is_changed() {
         let world_size = world_settings.world_size;
@@ -61,7 +62,14 @@ pub fn generate_world_mesh(
                 let mesh = mesh_assets.add(grid_mesh);
 
                 //TODO: Add texture to material
-                let material = materials.add(Color::rgb(0.2, 0.8, 0.2).into());
+                let texture_handle = asset_server.load("textures/grass.png");
+                let material = materials.add(StandardMaterial {
+                    base_color_texture: Some(texture_handle),
+                    alpha_mode: AlphaMode::Opaque,
+                    specular_transmission: 0.0,
+                    reflectance: 0.0,
+                    ..Default::default()
+                });
 
                 commands
                     .spawn(PbrBundle {
@@ -118,10 +126,10 @@ fn create_attributes(starting_position: [u32; 2], heightmap: &Heightmap) -> Mesh
         starting_position[1] as f32 + tile_size * TILE_SIZE,
     ];
     let vertices = vec![vert_0, vert_1, vert_2, vert_3];
-    let uv_0 = [-1.0, -1.0];
-    let uv_1 = [1.0, -1.0];
+    let uv_0 = [0.0, 0.0];
+    let uv_1 = [1.0, 0.0];
     let uv_2 = [1.0, 1.0];
-    let uv_3 = [-1.0, 1.0];
+    let uv_3 = [0.0, 1.0];
     let uv = vec![uv_0, uv_1, uv_2, uv_3];
     let indices_count = ((starting_position[0] + starting_position[1] * CHUNK_SIZE)
         * vertices.len() as u32)
