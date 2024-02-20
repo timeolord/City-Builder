@@ -4,3 +4,4 @@ old_version
 *.etl
 /*.etl*
 flamegraph.svg
+/.vscode
