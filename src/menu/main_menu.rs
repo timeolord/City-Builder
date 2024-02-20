@@ -43,6 +43,10 @@ fn main_menu(
                     {
                         dialog = dialog.show_drives(false);
                     }
+                    #[cfg(linux)]
+                    {
+                        dialog = dialog.show_hidden(false);
+                    }
                     dialog.open();
                     *file_dialog = Some(dialog);
                 }

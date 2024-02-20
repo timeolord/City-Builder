@@ -24,8 +24,8 @@ use std::env;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
 enum GameState {
-    AssetLoading,
     #[default]
+    AssetLoading,
     MainMenu,
     WorldGeneration,
     World,

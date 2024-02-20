@@ -180,7 +180,7 @@ fn display_ui(
     mut file_dialog: Local<Option<FileDialog>>,
     mut frame_counter: Local<u8>,
 ) {
-    *frame_counter += 1;
+    *frame_counter = frame_counter.saturating_add(1);
     if bevy_heightmap_image_handle.is_none() || egui_heightmap_image_handle.is_none() {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server.add(heightmap_image);
@@ -277,7 +277,10 @@ fn display_ui(
                             {
                                 dialog = dialog.show_drives(false);
                             }
-
+                            #[cfg(linux)]
+                            {
+                                dialog = dialog.show_hidden(false);
+                            }
                             dialog.open();
                             *file_dialog = Some(dialog);
                         }
