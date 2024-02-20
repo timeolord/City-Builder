@@ -35,11 +35,12 @@ fn main_menu(
                 if file_dialog.is_none() {
                     let mut dialog = FileDialog::open_file(Some(save_path()))
                         .show_new_folder(false)
-                        .show_drives(false)
                         .show_rename(false)
                         .show_files_filter(Box::new(|str: &Path| {
                             str.extension().unwrap_or_default() == "save"
                         }));
+                    #[cfg(windows)]
+                    let mut dialog = dialog.show_drives(false);
                     dialog.open();
                     *file_dialog = Some(dialog);
                 }
