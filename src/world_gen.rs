@@ -78,6 +78,12 @@ impl Default for WorldSettings {
     }
 }
 
+impl WorldSettings {
+    fn seed(&self) -> u32 {
+        self.noise_settings.seed
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct HeightmapLoadBar {
     heightmap_progress: f32,

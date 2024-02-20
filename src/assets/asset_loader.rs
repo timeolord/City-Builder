@@ -2,11 +2,13 @@ use std::path::Path;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
+use image::{DynamicImage, RgbImage, RgbaImage};
+use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use crate::GameState;
 
-use super::{TerrainTextures, TerrainType};
+use super::{TerrainTextureAtlas, TerrainTextures, TerrainType};
 
 pub struct AssetLoaderPlugin;
 
@@ -14,6 +16,7 @@ impl Plugin for AssetLoaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TerrainTextures>();
         app.init_resource::<AssetLoadBar>();
+        app.init_resource::<TerrainTextureAtlas>();
         app.add_systems(
             Update,
             (check_assets, display_ui).run_if(in_state(GameState::AssetLoading)),
@@ -46,30 +49,26 @@ fn display_ui(mut contexts: EguiContexts, asset_load_bar: Res<AssetLoadBar>) {
 
 fn start_load_assets(
     asset_server: Res<AssetServer>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut terrain_textures: ResMut<TerrainTextures>,
 ) {
     for terrain_type in TerrainType::iter() {
         let mut file_path = Path::new("textures").join(terrain_type.to_string().to_lowercase());
         file_path.set_extension("png");
         let texture_handle = asset_server.load(file_path);
-        let material = StandardMaterial {
-            base_color_texture: Some(texture_handle.clone()),
-            ..Default::default()
-        };
-        let material_handle = materials.add(material);
-        terrain_textures[terrain_type] = (texture_handle, material_handle);
+        terrain_textures[terrain_type] = texture_handle;
     }
 }
 
 fn check_assets(
     mut game_state: ResMut<NextState<GameState>>,
     terrain_textures: Res<TerrainTextures>,
-    image_assets: Res<Assets<Image>>,
+    mut image_assets: ResMut<Assets<Image>>,
     mut asset_load_bar: ResMut<AssetLoadBar>,
+    mut terrain_texture_atlas: ResMut<TerrainTextureAtlas>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mut progress = 0.0;
-    for (image, _) in terrain_textures.values() {
+    for image in terrain_textures.values() {
         match image_assets.get(image) {
             Some(_) => progress += 1.0 / TerrainType::iter().len() as f32,
             None => {}
@@ -77,6 +76,30 @@ fn check_assets(
     }
     asset_load_bar.progress = progress;
     if progress >= 1.0 {
+        //Create Texture Atlas
+        let mut texture_atlas: Vec<u8> = Vec::new();
+        let mut image_size = UVec2::new(0, 0);
+        for image in terrain_textures.values() {
+            let image = image_assets.get(image).unwrap();
+            image_size = image.size();
+            texture_atlas.append(&mut image.data.iter().cloned().collect_vec());
+        }
+        let image = RgbaImage::from_raw(
+            image_size.x,
+            TerrainType::iter().len() as u32 * image_size.y,
+            texture_atlas,
+        )
+        .unwrap();
+        let image = DynamicImage::ImageRgba8(image);
+        let image = Image::from_dynamic(image, false);
+        terrain_texture_atlas.handle = materials.add(StandardMaterial {
+            base_color_texture: Some(image_assets.add(image)),
+            alpha_mode: AlphaMode::Opaque,
+            specular_transmission: 0.0,
+            reflectance: 0.0,
+            ..Default::default()
+        });
+
         game_state.set(GameState::MainMenu);
     }
 }
