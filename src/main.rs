@@ -54,7 +54,8 @@ fn main() {
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
     }
-    App::new()
+    let mut app = &mut App::new();
+    app = app
         .add_state::<GameState>()
         .add_plugins(
             DefaultPlugins
@@ -83,10 +84,9 @@ fn main() {
         )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin)
-        .add_plugins(plugins)
-        #[cfg(unix)] {
-        .add_systems(Update, frame_progress)
+        .add_plugins(plugins);
+            #[cfg(unix)] {
+        app = app.add_systems(Update, frame_progress);
         }
-        .run();
-    println!("Hello, world!");
+    app.run();
 }
