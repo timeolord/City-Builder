@@ -85,8 +85,9 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin)
         .add_plugins(plugins);
-            #[cfg(unix)] {
+    #[cfg(unix)]
+    {
         app = app.add_systems(Update, frame_progress);
-        }
+    }
     app.run();
 }

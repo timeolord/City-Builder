@@ -78,15 +78,6 @@ pub fn input(
         cursor_delta += event.delta;
     }
 
-    //Sets the height of the camera to the terrain
-    if let Ok(raycaster) = terrain_raycaster.get_single() {
-        raycaster.intersections().first().map(|(_, intersection)| {
-            let height_delta = intersection.position().y - transform.target.y;
-            transform.target.y += height_delta;
-            transform.eye.y += height_delta;
-        });
-    }
-
     if mouse_buttons.pressed(MouseButton::Middle) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
     }
@@ -105,18 +96,22 @@ pub fn input(
 
     let keyboard_translate_sensitivity = 0.01;
 
+    let mut has_moved = false;
+
     //Keyboard camera translation
     if keyboard.pressed(KeyCode::W) {
         let mut look_direction = transform.target - transform.eye;
         look_direction.y = 0.0;
         transform.target += look_direction.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye += look_direction.normalize() * keyboard_translate_sensitivity * distance;
+        has_moved = true;
     }
     if keyboard.pressed(KeyCode::S) {
         let mut look_direction = transform.target - transform.eye;
         look_direction.y = 0.0;
         transform.target -= look_direction.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye -= look_direction.normalize() * keyboard_translate_sensitivity * distance;
+        has_moved = true;
     }
     if keyboard.pressed(KeyCode::A) {
         let look_direction = transform.target - transform.eye;
@@ -127,6 +122,7 @@ pub fn input(
         };
         transform.target += left.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye += left.normalize() * keyboard_translate_sensitivity * distance;
+        has_moved = true;
     }
     if keyboard.pressed(KeyCode::D) {
         let look_direction = transform.target - transform.eye;
@@ -137,10 +133,22 @@ pub fn input(
         };
         transform.target -= left.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye -= left.normalize() * keyboard_translate_sensitivity * distance;
+        has_moved = true;
     }
 
     if transform.eye.y < transform.target.y {
         transform.eye.y = transform.target.y;
+    }
+
+    if has_moved {
+        //Sets the height of the camera to the terrain
+        if let Ok(raycaster) = terrain_raycaster.get_single() {
+            raycaster.intersections().first().map(|(_, intersection)| {
+                let height_delta = intersection.position().y - transform.target.y;
+                transform.target.y += height_delta;
+                transform.eye.y += height_delta;
+            });
+        }
     }
 
     //Restrict Camera to world bounds
