@@ -3,6 +3,7 @@ use bevy::{
     render::{mesh::Indices, render_resource::PrimitiveTopology},
 };
 use bevy_mod_raycast::deferred::RaycastMesh;
+use itertools::Itertools;
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
 
 use crate::{
@@ -14,11 +15,78 @@ use crate::{
 };
 #[derive(Component)]
 pub struct WorldMesh;
+#[derive(Component)]
+pub struct TreeMesh;
 
 use super::{WorldSettings, CHUNK_SIZE};
 
 pub const TILE_SIZE: f32 = 1.0;
 pub const WORLD_HEIGHT_SCALE: f32 = 200.0;
+
+pub fn generate_tree_mesh(
+    mut commands: Commands,
+    tree_mesh_query: Query<Entity, With<WorldMesh>>,
+    heightmap: Res<Heightmap>,
+    world_settings: Res<WorldSettings>,
+    mut mesh_assets: ResMut<Assets<Mesh>>,
+) {
+    if tree_mesh_query.is_empty() || heightmap.is_changed() {
+        let mut random_number_generator = StdRng::seed_from_u64(world_settings.seed() as u64);
+        let world_size = world_settings.world_size;
+        for entity in tree_mesh_query.iter() {
+            commands.entity(entity).despawn();
+        }
+
+        for chunk_y in 0..world_size[0] {
+            for chunk_x in 0..world_size[1] {
+                let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+
+                let mut vertices = Vec::new();
+                let mut uvs = Vec::new();
+                let mut indices = Vec::new();
+                let mut normals = Vec::new();
+
+                for y in 0..CHUNK_SIZE {
+                    for x in 0..CHUNK_SIZE {
+                        let starting_position =
+                            [x + chunk_x * CHUNK_SIZE, y + chunk_y * CHUNK_SIZE];
+                        let chance_for_tree = heightmap.tree_density(starting_position);
+                        if chance_for_tree < random_number_generator.gen_range(0.0..1.0) {
+                            let (new_vertices, uv, index, normal) = create_tree_mesh(
+                                starting_position,
+                                &heightmap,
+                                indices.len() as u32,
+                            );
+
+                            vertices.extend(new_vertices);
+                            uvs.extend(uv);
+                            indices.extend(index);
+                            normals.extend(normal);
+                        }
+                    }
+                }
+
+                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+
+                grid_mesh.set_indices(Some(Indices::U32(indices)));
+                let mesh = mesh_assets.add(grid_mesh);
+
+                /* let material = terrain_texture_atlas.handle.clone(); */
+
+                commands
+                    .spawn(PbrBundle {
+                        mesh,
+                        /* material, */
+                        ..Default::default()
+                    })
+                    .insert(TreeMesh)
+                    .insert(WorldEntity);
+            }
+        }
+    }
+}
 
 pub fn generate_world_mesh(
     mut commands: Commands,
@@ -46,7 +114,7 @@ pub fn generate_world_mesh(
 
                 for y in 0..CHUNK_SIZE {
                     for x in 0..CHUNK_SIZE {
-                        let (new_vertices, uv, index, normal) = create_attributes(
+                        let (new_vertices, uv, index, normal) = create_terrain_mesh(
                             [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
                             &heightmap,
                             &mut random_number_generator,
@@ -83,7 +151,63 @@ pub fn generate_world_mesh(
 
 type MeshVecs = (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>);
 
-fn create_attributes(
+fn create_tree_mesh(
+    starting_position: [u32; 2],
+    heightmap: &Heightmap,
+    current_index: u32,
+) -> MeshVecs {
+    let cylinder = shape::Cylinder {
+        height: 1.0,
+        radius: 0.1,
+        resolution: 5,
+        segments: 1,
+        ..Default::default()
+    };
+    let mesh = Mesh::from(cylinder);
+    let mut positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+    let height = heightmap[starting_position] as f32 * WORLD_HEIGHT_SCALE;
+
+    positions.iter_mut().for_each(|pos| {
+        pos[0] += starting_position[0] as f32;
+        pos[1] += height;
+        pos[2] += starting_position[1] as f32;
+    });
+
+    let normals = mesh
+        .attribute(Mesh::ATTRIBUTE_NORMAL)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+
+    let uvs = mesh
+        .attribute(Mesh::ATTRIBUTE_UV_0)
+        .unwrap()
+        .get_bytes()
+        .chunks_exact(4);
+    let uvs = uvs
+        .map(|uv| {
+            let uv = f32::from_ne_bytes([uv[0], uv[1], uv[2], uv[3]]);
+            [uv, uv]
+        })
+        .collect();
+
+    let indices = mesh
+        .indices()
+        .unwrap()
+        .iter()
+        .map(|x| x as u32 + current_index)
+        .collect_vec();
+
+    (positions, uvs, indices, normals)
+}
+
+fn create_terrain_mesh(
     starting_position: [u32; 2],
     heightmap: &Heightmap,
     rng: &mut StdRng,

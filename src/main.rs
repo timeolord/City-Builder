@@ -11,6 +11,7 @@
 //! A simple 3D scene with light shining over a cube sitting on a plane.
 mod assets;
 mod camera;
+mod debug;
 mod menu;
 mod save;
 mod utils;
@@ -18,7 +19,9 @@ mod world;
 mod world_gen;
 
 use crate::assets::asset_loader;
-use bevy::{core::TaskPoolThreadAssignmentPolicy, prelude::*};
+use bevy::{
+    core::TaskPoolThreadAssignmentPolicy, diagnostic::FrameTimeDiagnosticsPlugin, prelude::*,
+};
 use bevy_egui::EguiPlugin;
 use std::env;
 
@@ -41,6 +44,7 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
+        debug::DebugPlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
@@ -72,6 +76,7 @@ fn main() {
                     },
                 }),
         )
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin)
         .add_plugins(plugins)
         .run();

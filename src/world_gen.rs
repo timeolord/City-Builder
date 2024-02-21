@@ -21,7 +21,7 @@ use crate::{
 use self::{
     erosion::{erode_heightmap, ErosionEvent},
     heightmap::Heightmap,
-    mesh_gen::generate_world_mesh,
+    mesh_gen::{generate_tree_mesh, generate_world_mesh},
     noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{
@@ -33,8 +33,8 @@ use bevy_egui::{
 // 1. Generate height map # DONE
 // 2. Generate mesh from height map # DONE
 // 2a. Generate water mesh from height map
-// 3. Generate ground textures from height map
-// 4. Spawn trees
+// 3. Generate ground textures from height map # DONE
+// 4. Spawn trees 
 
 pub struct WorldGenPlugin;
 
@@ -49,7 +49,7 @@ impl Plugin for WorldGenPlugin {
         );
         app.add_systems(
             Update,
-            generate_world_mesh.run_if(in_state(GameState::World)),
+            (generate_world_mesh, generate_tree_mesh).run_if(in_state(GameState::World)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
     }
@@ -195,7 +195,7 @@ fn display_ui(
         *egui_heightmap_image_handle = Some(heightmap_egui_handle);
     }
 
-    //Update the image if the heightmap has changed every 10 frames
+    //Update the image if the heightmap has changed every 30 frames
     if heightmap.is_changed() && (*frame_counter > 30 || heightmap_load_bar.progress() >= 1.0) {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server

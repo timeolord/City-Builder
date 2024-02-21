@@ -12,11 +12,12 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::HEIGHTMAP_CHUNK_SIZE;
+use super::{CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
     data: Array2D<f64>,
+    pub tree_density: Array2D<f64>,
 }
 
 impl Heightmap {
@@ -27,6 +28,11 @@ impl Heightmap {
                 (size[0] * HEIGHTMAP_CHUNK_SIZE as u32) as usize,
                 (size[1] * HEIGHTMAP_CHUNK_SIZE as u32) as usize,
             ),
+            tree_density: Array2D::filled_with(
+                0.5,
+                (size[0] * CHUNK_SIZE as u32) as usize,
+                (size[1] * CHUNK_SIZE as u32) as usize,
+            ),
         }
     }
     pub fn get(&self, point: [u32; 2]) -> Option<f64> {
@@ -34,6 +40,9 @@ impl Heightmap {
     }
     pub fn size(&self) -> WorldSize {
         [self.data.num_rows() as u32, self.data.num_columns() as u32]
+    }
+    pub fn tree_density(&self, point: [u32; 2]) -> f64 {
+        self.tree_density[(point[0] as usize, point[1] as usize)]
     }
     pub fn neighbours(&self, point: [u32; 2]) -> impl Iterator<Item = [u32; 2]> + '_ {
         CardinalDirection::iter().filter_map(move |dir| {
