@@ -186,10 +186,6 @@ fn display_ui(
     mut file_dialog: Local<Option<FileDialog>>,
     mut frame_counter: Local<u8>,
 ) {
-    #[cfg(unix)]
-        {
-            coz::scope!("Display UI");
-        }
     *frame_counter = frame_counter.saturating_add(1);
     if bevy_heightmap_image_handle.is_none() || egui_heightmap_image_handle.is_none() {
         let heightmap_image = heightmap.clone().as_bevy_image();
@@ -342,4 +338,8 @@ fn display_ui(
                 }
             });
         });
+        #[cfg(unix)]
+        {
+            coz::progress!("Display UI");
+        }
 }

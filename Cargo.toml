@@ -5,7 +5,7 @@ edition = "2021"
 
 [profile.release]
 debug = true
-lto = "thin"
+# lto = "thin"
 
 [profile.dev.package."*"]
 opt-level = 3
