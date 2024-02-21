@@ -40,9 +40,9 @@ pub fn erode_heightmap(
         *benchmark = Some(Instant::now());
     }
     if *working {
-        #[cfg(linux)]
+        #[cfg(unix)]
         {
-            coz::scope!("erode_heightmap");
+            coz::scope!("Erode Heightmap");
         }
         while (Instant::now() - start_time).as_secs_f64() < max_runtime {
             if *erosion_counter == 0 {
@@ -98,10 +98,6 @@ pub fn erode_heightmap(
                 });
                 heightmap_load_bar.erosion_progress += 1.0 / erosion_chunks as f32;
                 *erosion_counter = erosion_counter.saturating_sub(1);
-                #[cfg(linux)]
-                {
-                    coz::progress!();
-                }
             }
         }
     }
@@ -266,6 +262,10 @@ impl<'a> WaterErosion<'a> {
                 }
             }
             self.position = next_position;
+            #[cfg(unix)]
+                {
+                    coz::progress!("Erosion Step");
+                }
         }
         self.radius = 50;
         self.deposit(self.sediment * deposition_speed);

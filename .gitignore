@@ -4,3 +4,5 @@ old_version
 *.etl
 /*.etl*
 flamegraph.svg
+/.vscode
+profile.coz
