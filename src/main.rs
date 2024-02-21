@@ -36,6 +36,11 @@ enum GameState {
 
 pub const DEBUG: bool = cfg!(debug_assertions);
 
+#[cfg(unix)]
+fn frame_progress() {
+    coz::progress!("Frame");
+}
+
 fn main() {
     let plugins = (
         camera::CameraPlugin,
@@ -79,6 +84,9 @@ fn main() {
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin)
         .add_plugins(plugins)
+        #[cfg(unix)] {
+        .add_systems(Update, frame_progress)
+        }
         .run();
     println!("Hello, world!");
 }
