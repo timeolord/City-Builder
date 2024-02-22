@@ -6,7 +6,13 @@ use crate::{
     world::WorldSize,
 };
 use array2d::Array2D;
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::{
+        extract_resource::ExtractResource,
+        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
+    },
+};
 use image::{DynamicImage, GrayImage};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -14,10 +20,35 @@ use strum::IntoEnumIterator;
 
 use super::{CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
-#[derive(Resource, Clone, Debug, Serialize, Deserialize)]
+#[derive(ExtractResource, Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
     data: Array2D<f64>,
     pub tree_density: Array2D<f64>,
+}
+
+#[derive(ExtractResource, Deref, Resource, Clone, Debug)]
+pub struct HeightmapImage {
+    pub image: Handle<Image>,
+}
+
+impl HeightmapImage {
+    pub fn new(size: WorldSize, image_assets: &mut Assets<Image>) -> Self {
+        let mut image = Image::new_fill(
+            Extent3d {
+                width: size[0],
+                height: size[1],
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[0, 0, 0, 255],
+            TextureFormat::Rgba8Unorm,
+        );
+        image.texture_descriptor.usage = TextureUsages::COPY_DST
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING;
+        let image = image_assets.add(image);
+        Self { image }
+    }
 }
 
 impl Heightmap {
@@ -73,8 +104,18 @@ impl Heightmap {
     pub fn as_bevy_image(self) -> Image {
         Image::from_dynamic(self.as_dynamic_image(), false)
     }
+    /* pub fn as_texture(self) -> Image {
+        let image = self.as_dynamic_image();
+        let image = image.into_luma8();
+        let image = DynamicImage::ImageLuma8(image);
+        Image::from_dynamic(image, false)
+    } */
+    pub fn as_vec(&self) -> Vec<f64> {
+        self.data.as_column_major().to_vec()
+    }
 }
 
+#[derive(Debug, Clone)]
 pub struct HeightmapCircle {
     pub center: [i32; 2],
     pub heightmap_size: WorldSize,

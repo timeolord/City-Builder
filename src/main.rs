@@ -19,6 +19,7 @@ mod world;
 mod world_gen;
 
 use crate::assets::asset_loader;
+
 use bevy::{
     core::TaskPoolThreadAssignmentPolicy, diagnostic::FrameTimeDiagnosticsPlugin, prelude::*,
 };
@@ -36,11 +37,6 @@ enum GameState {
 
 pub const DEBUG: bool = cfg!(debug_assertions);
 
-#[cfg(unix)]
-fn frame_progress() {
-    coz::progress!("Frame");
-}
-
 fn main() {
     let plugins = (
         camera::CameraPlugin,
@@ -49,7 +45,6 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
-        debug::DebugPlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
@@ -84,10 +79,7 @@ fn main() {
         )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(EguiPlugin)
-        .add_plugins(plugins);
-    #[cfg(unix)]
-    {
-        app = app.add_systems(Update, frame_progress);
-    }
+        .add_plugins(plugins)
+        .add_plugins(debug::DebugPlugin);
     app.run();
 }

@@ -96,9 +96,9 @@ pub fn erode_heightmap(
                 *erosion_counter = erosion_counter.saturating_sub(1);
             }
             #[cfg(unix)]
-        {
-            coz::progress!("Erode Heightmap");
-        }
+            {
+                coz::progress!("Erode Heightmap");
+            }
         }
     }
 }
@@ -183,7 +183,7 @@ impl<'a> WaterErosion<'a> {
 
             //Calculate gradient
             let neighbours = self.heightmap.get_circle(position, self.radius);
-            for neighbour in neighbours {
+            for neighbour in neighbours.clone() {
                 if neighbour == position {
                     continue;
                 }
@@ -191,11 +191,16 @@ impl<'a> WaterErosion<'a> {
                     Vec2::from_array(self.position.as_f32()) - Vec2::from_array(neighbour.as_f32());
                 let height_difference = self.read(position) - self.read(neighbour);
                 self.direction +=
-                    (direction.normalize() * -(height_difference as f32) * gravity as f32)
-                        * direction_inertia;
+                    (direction * -(height_difference as f32) * gravity as f32) * direction_inertia;
+            }
+            let normalized_direction = self.direction.try_normalize();
+            if normalized_direction.is_none() {
+                return;
+            } else {
+                self.direction = normalized_direction.unwrap();
             }
             let next_position = (Vec2::from_array(self.position.as_f32())
-                + (self.direction.normalize() * self.radius as f32))
+                + (self.direction * self.radius as f32))
                 .round()
                 .to_array()
                 .as_u32();
@@ -213,7 +218,7 @@ impl<'a> WaterErosion<'a> {
 
             let height_difference = self.read(position) - self.read(next_position);
             self.speed += height_difference * gravity;
-            self.direction = self.direction.normalize() * self.speed as f32;
+            self.direction = self.direction * self.speed as f32;
 
             let carry_capacity = height_difference.max(minimum_slope)
                 * self.speed
@@ -263,9 +268,9 @@ impl<'a> WaterErosion<'a> {
             }
             self.position = next_position;
             #[cfg(unix)]
-                {
-                    coz::progress!("Erosion Step");
-                }
+            {
+                coz::progress!("Erosion Step");
+            }
         }
         self.radius = 50;
         self.deposit(self.sediment * deposition_speed);

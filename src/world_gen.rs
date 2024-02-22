@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use bevy::{
+    pbr::ExtendedMaterial,
     prelude::*,
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
@@ -11,6 +12,7 @@ pub mod erosion;
 pub mod heightmap;
 pub mod mesh_gen;
 pub mod noise_gen;
+pub mod terrain_material;
 
 use crate::{
     save::{save_path, SaveEvent},
@@ -19,10 +21,7 @@ use crate::{
 };
 
 use self::{
-    erosion::{erode_heightmap, ErosionEvent},
-    heightmap::Heightmap,
-    mesh_gen::{generate_tree_mesh, generate_world_mesh},
-    noise_gen::{noise_function, NoiseFunction, NoiseSettings},
+    erosion::{erode_heightmap, ErosionEvent}, heightmap::{Heightmap, HeightmapImage}, mesh_gen::{generate_world_mesh, TerrainMeshGenPlugin}, noise_gen::{noise_function, NoiseFunction, NoiseSettings}, terrain_material::TerrainMaterial
 };
 use bevy_egui::{
     egui::{self, TextureId},
@@ -34,22 +33,26 @@ use bevy_egui::{
 // 2. Generate mesh from height map # DONE
 // 2a. Generate water mesh from height map
 // 3. Generate ground textures from height map # DONE
-// 4. Spawn trees 
+// 4. Spawn trees
 
 pub struct WorldGenPlugin;
 
 impl Plugin for WorldGenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ErosionEvent>();
+/*         app.add_plugins(MaterialPlugin::<
+            ExtendedMaterial<StandardMaterial, TerrainMaterial>,
+        >::default()); */
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
             (generate_heightmap, erode_heightmap, display_ui)
                 .run_if(in_state(GameState::WorldGeneration)),
         );
+        app.add_plugins(TerrainMeshGenPlugin);
         app.add_systems(
             Update,
-            (generate_world_mesh, generate_tree_mesh).run_if(in_state(GameState::World)),
+            (generate_world_mesh /* generate_tree_mesh */,).run_if(in_state(GameState::World)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
     }
@@ -95,9 +98,13 @@ impl HeightmapLoadBar {
     }
 }
 
-fn init(mut commands: Commands) {
+fn init(mut commands: Commands, mut image_assets: ResMut<Assets<Image>>) {
     commands.init_resource::<WorldSettings>();
     commands.insert_resource(Heightmap::new(WorldSettings::default().world_size));
+    commands.insert_resource(HeightmapImage::new(
+        WorldSettings::default().world_size,
+        &mut image_assets,
+    ));
     commands.init_resource::<HeightmapLoadBar>();
 }
 
@@ -338,8 +345,8 @@ fn display_ui(
                 }
             });
         });
-        #[cfg(unix)]
-        {
-            coz::progress!("Display UI");
-        }
+    #[cfg(unix)]
+    {
+        coz::progress!("Display UI");
+    }
 }
