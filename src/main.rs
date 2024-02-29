@@ -6,7 +6,8 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::module_name_repetitions)]
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+/* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] */
+#![feature(slice_flatten)]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
 mod assets;
@@ -14,6 +15,7 @@ mod camera;
 mod debug;
 mod menu;
 mod save;
+mod shaders;
 mod utils;
 mod world;
 mod world_gen;
@@ -45,13 +47,14 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
+        shaders::ComputeShaderPlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
     }
     let mut app = &mut App::new();
     app = app
-        .add_state::<GameState>()
+        .init_state::<GameState>()
         .add_plugins(
             DefaultPlugins
                 .set(ImagePlugin::default_nearest())
@@ -75,6 +78,14 @@ fn main() {
                             percent: 0.75,
                         },
                     },
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        present_mode: bevy::window::PresentMode::AutoNoVsync,
+                        focused: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
                 }),
         )
         .add_plugins(FrameTimeDiagnosticsPlugin::default())

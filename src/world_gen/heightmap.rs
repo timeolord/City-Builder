@@ -1,8 +1,10 @@
 use std::ops::{Index, IndexMut};
 
 use crate::{
-    utils::direction::CardinalDirection,
-    utils::math::{AsI32, AsU32},
+    utils::{
+        direction::CardinalDirection,
+        math::{bilinear_interpolation, AsI32, AsU32},
+    },
     world::WorldSize,
 };
 use array2d::Array2D;
@@ -10,28 +12,42 @@ use bevy::{
     prelude::*,
     render::{
         extract_resource::ExtractResource,
-        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
+        render_asset::RenderAssetUsages,
+        render_resource::{AsBindGroup, Buffer, TextureUsages},
     },
 };
-use image::{DynamicImage, GrayImage};
+use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
+use num::Integer;
+use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
+use super::{mesh_gen::WORLD_HEIGHT_SCALE, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
-#[derive(ExtractResource, Resource, Clone, Debug, Serialize, Deserialize)]
+#[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
-    data: Array2D<f64>,
+    data: Array2D<f32>,
     pub tree_density: Array2D<f64>,
 }
 
-#[derive(ExtractResource, Deref, Resource, Clone, Debug)]
+#[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
 pub struct HeightmapImage {
+    #[storage_texture(0, visibility(compute), image_format = Rgba8Unorm, access = ReadWrite)]
     pub image: Handle<Image>,
+    /* #[storage_texture(1, visibility(compute), image_format = Rgba32Float, access = ReadWrite)]
+    pub vertices: Handle<Image>, */
+    #[storage(1, visibility(compute), buffer)]
+    pub buffer: Buffer,
+    /* #[storage(3, visibility(compute), buffer)] */
+    pub staging_buffer: Buffer,
+    #[uniform(2, visibility(compute))]
+    pub size: UVec2,
+    #[uniform(3, visibility(compute))]
+    pub world_size: UVec2,
 }
 
-impl HeightmapImage {
+/* impl HeightmapImage {
     pub fn new(size: WorldSize, image_assets: &mut Assets<Image>) -> Self {
         let mut image = Image::new_fill(
             Extent3d {
@@ -49,7 +65,7 @@ impl HeightmapImage {
         let image = image_assets.add(image);
         Self { image }
     }
-}
+} */
 
 impl Heightmap {
     pub fn new(size: WorldSize) -> Self {
@@ -66,8 +82,9 @@ impl Heightmap {
             ),
         }
     }
-    pub fn get(&self, point: [u32; 2]) -> Option<f64> {
-        self.data.get(point[0] as usize, point[1] as usize).copied()
+    pub fn get<N: Integer + AsPrimitive<usize>, T: Into<[N; 2]>>(&self, point: T) -> Option<f32> {
+        let point = point.into();
+        self.data.get(point[0].as_(), point[1].as_()).copied()
     }
     pub fn size(&self) -> WorldSize {
         [self.data.num_rows() as u32, self.data.num_columns() as u32]
@@ -99,19 +116,37 @@ impl Heightmap {
         }
     }
     pub fn as_dynamic_image(self) -> DynamicImage {
-        DynamicImage::ImageLuma8(self.clone().into())
+        DynamicImage::ImageRgba8(self.clone().into())
     }
     pub fn as_bevy_image(self) -> Image {
-        Image::from_dynamic(self.as_dynamic_image(), false)
+        let mut image = Image::from_dynamic(
+            self.as_dynamic_image(),
+            false,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        );
+        image.texture_descriptor.usage = TextureUsages::COPY_DST
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING;
+        image
     }
-    /* pub fn as_texture(self) -> Image {
-        let image = self.as_dynamic_image();
-        let image = image.into_luma8();
-        let image = DynamicImage::ImageLuma8(image);
-        Image::from_dynamic(image, false)
-    } */
-    pub fn as_vec(&self) -> Vec<f64> {
+    pub fn as_vec(&self) -> Vec<f32> {
         self.data.as_column_major().to_vec()
+    }
+    pub fn interpolate_height(&self, position: Vec2) -> f32 {
+        let fractional_position = position.xy().fract();
+        let integer_position = position.floor().as_uvec2();
+        let heights = vec![
+            self[integer_position],
+            self[integer_position + UVec2::from_array([1, 0])],
+            self[integer_position + UVec2::from_array([0, 1])],
+            self[integer_position + UVec2::from_array([1, 1])],
+        ];
+        let x = bilinear_interpolation(
+            [heights[0], heights[1]],
+            [heights[2], heights[3]],
+            [fractional_position.x, fractional_position.y],
+        );
+        x * WORLD_HEIGHT_SCALE
     }
 }
 
@@ -150,25 +185,32 @@ impl Iterator for HeightmapCircle {
     }
 }
 
-impl From<Heightmap> for GrayImage {
+impl From<Heightmap> for RgbaImage {
     fn from(heightmap: Heightmap) -> Self {
         let [width, height] = heightmap.size();
-        GrayImage::from_raw(
+        RgbaImage::from_raw(
             width,
             height,
             heightmap
                 .data
                 .as_column_major()
                 .iter()
-                .map(|&x| (x * 255.0) as u8)
+                .map(|&x| [(x * 255.0) as u8, (x * 255.0) as u8, (x * 255.0) as u8, 255])
+                .flatten()
                 .collect_vec(),
         )
         .expect("Failed to convert heightmap to image")
     }
 }
+impl Index<UVec2> for Heightmap {
+    type Output = f32;
 
+    fn index(&self, index: UVec2) -> &Self::Output {
+        &self.data[(index.x as usize, index.y as usize)]
+    }
+}
 impl Index<[u32; 2]> for Heightmap {
-    type Output = f64;
+    type Output = f32;
 
     fn index(&self, index: [u32; 2]) -> &Self::Output {
         &self.data[(index[0] as usize, index[1] as usize)]

@@ -8,6 +8,7 @@ use bevy::math::{
     Vec2, Vec3,
 };
 use itertools::Itertools;
+use num_traits::Float;
 
 pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 {
     let normal = (Vec3::from_array(b) - Vec3::from_array(a))
@@ -180,6 +181,14 @@ impl<T: num_traits::cast::AsPrimitive<i32>, const N: usize> AsI32<T, N> for [T; 
         }
         array
     }
+}
+
+pub fn lerp<T: Float>(a: T, b: T, t: T) -> T {
+    a * (T::one() - t) + b * t
+}
+
+pub fn bilinear_interpolation<T: Float>(a: [T; 2], b: [T; 2], c: [T; 2]) -> T {
+    lerp(lerp(a[0], a[1], c[0]), lerp(b[0], b[1], c[0]), c[1])
 }
 
 #[derive(Debug, Clone, Copy)]

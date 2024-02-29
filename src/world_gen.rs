@@ -1,8 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::{
+    mem,
+    path::{Path, PathBuf},
+};
 
 use bevy::{
-    pbr::ExtendedMaterial,
     prelude::*,
+    render::{
+        render_resource::{
+            BufferDescriptor, BufferUsages,
+        },
+        renderer::RenderDevice,
+    },
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
 use egui_file::FileDialog;
@@ -21,7 +29,10 @@ use crate::{
 };
 
 use self::{
-    erosion::{erode_heightmap, ErosionEvent}, heightmap::{Heightmap, HeightmapImage}, mesh_gen::{generate_world_mesh, TerrainMeshGenPlugin}, noise_gen::{noise_function, NoiseFunction, NoiseSettings}, terrain_material::TerrainMaterial
+    erosion::{erode_heightmap, ErosionEvent},
+    heightmap::{Heightmap, HeightmapImage},
+    mesh_gen::generate_world_mesh,
+    noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{
     egui::{self, TextureId},
@@ -40,19 +51,23 @@ pub struct WorldGenPlugin;
 impl Plugin for WorldGenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ErosionEvent>();
-/*         app.add_plugins(MaterialPlugin::<
-            ExtendedMaterial<StandardMaterial, TerrainMaterial>,
-        >::default()); */
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
-            (generate_heightmap, erode_heightmap, display_ui)
+            (
+                generate_heightmap,
+                erode_heightmap,
+                display_ui.run_if(resource_exists::<HeightmapImage>),
+            )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
-        app.add_plugins(TerrainMeshGenPlugin);
+        app.add_systems(
+            PostUpdate,
+            update_heightmap_image.run_if(resource_exists::<Heightmap>),
+        );
         app.add_systems(
             Update,
-            (generate_world_mesh /* generate_tree_mesh */,).run_if(in_state(GameState::World)),
+            (generate_world_mesh).run_if(in_state(GameState::World)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
     }
@@ -62,6 +77,68 @@ type WorldSize = [u32; 2];
 
 pub const CHUNK_SIZE: u32 = 128;
 pub const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
+
+fn update_heightmap_image(
+    mut commands: Commands,
+    heightmap: ResMut<Heightmap>,
+    world_settings: Res<WorldSettings>,
+    heightmap_image: Option<ResMut<HeightmapImage>>,
+    render_device: Res<RenderDevice>,
+    mut image_assets: ResMut<Assets<Image>>,
+    mut counter: Local<u8>,
+) {
+    *counter = counter.saturating_add(1);
+    if heightmap_image.is_none() {
+        /* let pixel = [0.25f32, 0.5, 0.75, 1.0];
+        let pixel_bytes = pixel.map(|x| x.to_ne_bytes()); */
+        /* let mut vertices_image = Image::new_fill(
+            Extent3d {
+                width: heightmap.size()[0],
+                height: heightmap.size()[1],
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            pixel_bytes.flatten(),
+            TextureFormat::Rgba32Float,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        );
+        vertices_image.texture_descriptor.usage = TextureUsages::COPY_DST | TextureUsages::COPY_SRC
+            | TextureUsages::STORAGE_BINDING
+            | TextureUsages::TEXTURE_BINDING; */
+        let vertices_length =
+            (heightmap.size()[0] * heightmap.size()[1] * 4 * 3 * mem::size_of::<f32>() as u32)
+                as u64;
+        println!("Vertices Length: {}", vertices_length);
+        /* println!("Vertices Length: {}, {}", vertices_length, vertices_image.data.len() as u64); */
+        let buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("Heightmap Vertices Buffer"),
+            size: vertices_length,
+            usage: BufferUsages::COPY_SRC | BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let staging_buffer = render_device.create_buffer(&BufferDescriptor {
+            label: Some("Heightmap Vertices Staging Buffer"),
+            size: vertices_length,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        commands.insert_resource(HeightmapImage {
+            image: image_assets.add(heightmap.clone().as_bevy_image()),
+            /* vertices: image_assets.add(vertices_image), */
+            size: heightmap.size().into(),
+            world_size: world_settings.tile_world_size().into(),
+            buffer,
+            staging_buffer,
+        });
+    } else if heightmap.is_changed() && *counter > 10 {
+        let old_image = image_assets
+            .get_mut(heightmap_image.as_ref().unwrap().image.clone_weak())
+            .unwrap();
+        let new_image = heightmap.clone().as_bevy_image();
+        *old_image = new_image;
+        *counter = 0;
+    }
+}
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {
@@ -85,6 +162,12 @@ impl WorldSettings {
     fn seed(&self) -> u32 {
         self.noise_settings.seed
     }
+    fn tile_world_size(&self) -> WorldSize {
+        let mut world_size = self.world_size;
+        world_size[0] *= CHUNK_SIZE;
+        world_size[1] *= CHUNK_SIZE;
+        world_size
+    }
 }
 
 #[derive(Resource, Default)]
@@ -98,13 +181,9 @@ impl HeightmapLoadBar {
     }
 }
 
-fn init(mut commands: Commands, mut image_assets: ResMut<Assets<Image>>) {
+fn init(mut commands: Commands) {
     commands.init_resource::<WorldSettings>();
     commands.insert_resource(Heightmap::new(WorldSettings::default().world_size));
-    commands.insert_resource(HeightmapImage::new(
-        WorldSettings::default().world_size,
-        &mut image_assets,
-    ));
     commands.init_resource::<HeightmapLoadBar>();
 }
 
@@ -139,7 +218,7 @@ fn generate_heightmap(
         for task in &mut tasks {
             let result = block_on(task);
             for (index, noise) in result {
-                heightmap[index] = noise;
+                heightmap[index] = noise as f32;
             }
         }
         tasks.clear();
@@ -180,10 +259,8 @@ fn generate_heightmap(
 }
 
 fn display_ui(
-    mut asset_server: ResMut<Assets<Image>>,
-    heightmap: Res<Heightmap>,
+    heightmap: Res<HeightmapImage>,
     mut contexts: EguiContexts,
-    mut bevy_heightmap_image_handle: Local<Option<Handle<Image>>>,
     mut egui_heightmap_image_handle: Local<Option<TextureId>>,
     mut world_settings: ResMut<WorldSettings>,
     mut seed_string: Local<String>,
@@ -194,15 +271,12 @@ fn display_ui(
     mut frame_counter: Local<u8>,
 ) {
     *frame_counter = frame_counter.saturating_add(1);
-    if bevy_heightmap_image_handle.is_none() || egui_heightmap_image_handle.is_none() {
-        let heightmap_image = heightmap.clone().as_bevy_image();
-        let heightmap_bevy_handle = asset_server.add(heightmap_image);
-        *bevy_heightmap_image_handle = Some(heightmap_bevy_handle.clone());
-        let heightmap_egui_handle = contexts.add_image(heightmap_bevy_handle);
+    if egui_heightmap_image_handle.is_none() {
+        let heightmap_egui_handle = contexts.add_image(heightmap.image.clone_weak());
         *egui_heightmap_image_handle = Some(heightmap_egui_handle);
     }
 
-    //Update the image if the heightmap has changed every 30 frames
+    /* //Update the image if the heightmap has changed every 30 frames
     if heightmap.is_changed() && (*frame_counter > 30 || heightmap_load_bar.progress() >= 1.0) {
         let heightmap_image = heightmap.clone().as_bevy_image();
         let heightmap_bevy_handle = asset_server
@@ -210,7 +284,7 @@ fn display_ui(
             .unwrap();
         *heightmap_bevy_handle = heightmap_image;
         *frame_counter = 0;
-    }
+    } */
 
     if seed_string.is_empty() {
         *seed_string = world_settings.noise_settings.seed.to_string();
@@ -321,7 +395,7 @@ fn display_ui(
                 if heightmap_load_bar.heightmap_progress >= 1.0 {
                     let heightmap_image = egui::Image::new(egui::load::SizedTexture::new(
                         egui_heightmap_image_handle.unwrap(),
-                        heightmap.size().as_f32(),
+                        <[f32; 2] as Into<egui::Vec2>>::into(heightmap.size.to_array().as_f32()),
                     ))
                     .fit_to_exact_size([512.0, 512.0].into());
                     ui.add(heightmap_image);

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 use bevy_egui::{egui, EguiContexts};
 use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
@@ -91,7 +91,7 @@ fn check_assets(
         )
         .unwrap();
         let image = DynamicImage::ImageRgba8(image);
-        let image = Image::from_dynamic(image, false);
+        let image = Image::from_dynamic(image, false, RenderAssetUsages::RENDER_WORLD);
         terrain_texture_atlas.handle = materials.add(StandardMaterial {
             base_color_texture: Some(image_assets.add(image)),
             alpha_mode: AlphaMode::Opaque,

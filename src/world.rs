@@ -37,7 +37,7 @@ fn setup(mut commands: Commands) {
             directional_light: DirectionalLight {
                 shadows_enabled: true,
                 // shadow_depth_bias: 0.2,
-                illuminance: 50000.0,
+                /* illuminance: 10_000.0, */
                 ..default()
             },
             transform: Transform {
@@ -56,6 +56,6 @@ fn setup(mut commands: Commands) {
         .insert(WorldEntity);
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 0.2,
+        brightness: 80.0,
     });
 }

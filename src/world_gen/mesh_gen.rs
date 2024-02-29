@@ -1,238 +1,30 @@
 use bevy::{
     prelude::*,
-    render::{mesh::Indices, render_resource::PrimitiveTopology, texture},
+    render::{mesh::Indices, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
 };
-use bevy_mod_raycast::deferred::RaycastMesh;
-use itertools::Itertools;
+
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
 
 use crate::{
     assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainType},
-    camera::CameraRaycastSet,
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
     world_gen::heightmap::Heightmap,
+    GameState,
 };
-use bevy::{
-    prelude::*,
-    render::{
-        extract_resource::{ExtractResource, ExtractResourcePlugin},
-        render_asset::RenderAssets,
-        render_graph::{self, RenderGraph},
-        render_resource::*,
-        renderer::{RenderContext, RenderDevice},
-        Render, RenderApp, RenderSet,
-    },
-    window::WindowPlugin,
-};
-use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Component)]
 pub struct WorldMesh;
 #[derive(Component)]
 pub struct TreeMesh;
 
-use super::{heightmap::HeightmapImage, WorldSettings, CHUNK_SIZE};
+use super::{WorldSettings, CHUNK_SIZE};
 
 pub const TILE_SIZE: f32 = 1.0;
 pub const WORLD_HEIGHT_SCALE: f32 = 200.0;
 
-pub struct TerrainMeshGenPlugin;
-
-
-impl Plugin for TerrainMeshGenPlugin {
-    fn build(&self, app: &mut App) {
-        // Extract the heightmap image resource from the main world into the render world
-        // for operation on by the compute shader and display on the sprite.
-        app.add_plugins(ExtractResourcePlugin::<Heightmap>::default());
-        let render_app = app.sub_app_mut(RenderApp);
-        render_app.add_systems(
-            Render,
-            prepare_bind_group.in_set(RenderSet::PrepareBindGroups),
-        );
-
-        let mut render_graph = render_app.world.resource_mut::<RenderGraph>();
-        render_graph.add_node("terrain_mesh_gen", TerrainMeshGenNode::default());
-        render_graph.add_node_edge(
-            "terrain_mesh_gen",
-            bevy::render::main_graph::node::CAMERA_DRIVER,
-        );
-    }
-    fn finish(&self, app: &mut App) {
-        let render_app = app.sub_app_mut(RenderApp);
-        render_app.init_resource::<TerrainMeshGenPipeline>();
-    }
-}
-
-#[derive(Resource)]
-struct HeightmapBindGroup(BindGroup);
-
-enum TerrainMeshGenState {
-    Loading,
-    Init,
-    Update,
-}
-
-struct TerrainMeshGenNode {
-    state: TerrainMeshGenState,
-}
-
-const WORKGROUP_SIZE: u32 = 8;
-
-impl render_graph::Node for TerrainMeshGenNode {
-    fn update(&mut self, world: &mut World) {
-        let pipeline = world.resource::<TerrainMeshGenPipeline>();
-        let pipeline_cache = world.resource::<PipelineCache>();
-
-        // if the corresponding pipeline has loaded, transition to the next stage
-        match self.state {
-            TerrainMeshGenState::Loading => {
-                if let CachedPipelineState::Ok(_) =
-                    pipeline_cache.get_compute_pipeline_state(pipeline.init_pipeline)
-                {
-                    self.state = TerrainMeshGenState::Init;
-                }
-            }
-            TerrainMeshGenState::Init => {
-                if let CachedPipelineState::Ok(_) =
-                    pipeline_cache.get_compute_pipeline_state(pipeline.update_pipeline)
-                {
-                    self.state = TerrainMeshGenState::Update;
-                }
-            }
-            TerrainMeshGenState::Update => {}
-        }
-    }
-
-    fn run(
-        &self,
-        _graph: &mut render_graph::RenderGraphContext,
-        render_context: &mut RenderContext,
-        world: &World,
-    ) -> Result<(), render_graph::NodeRunError> {
-        let texture_bind_group = &world.get_resource::<HeightmapBindGroup>();
-        let pipeline = world.resource::<TerrainMeshGenPipeline>();
-        let pipeline_cache = world.resource::<PipelineCache>();
-        let heightmap = world.get_resource::<Heightmap>();
-
-        if heightmap.is_none() || texture_bind_group.is_none() {
-            return Ok(());
-        }
-        let texture_bind_group = &texture_bind_group.unwrap().0;
-
-        let heightmap_size = heightmap.unwrap().size();
-
-        let mut pass = render_context
-            .command_encoder()
-            .begin_compute_pass(&ComputePassDescriptor::default());
-
-        pass.set_bind_group(0, texture_bind_group, &[]);
-
-        // select the pipeline based on the current state
-        match self.state {
-            TerrainMeshGenState::Loading => {}
-            TerrainMeshGenState::Init => {
-                let init_pipeline = pipeline_cache
-                    .get_compute_pipeline(pipeline.init_pipeline)
-                    .unwrap();
-                pass.set_pipeline(init_pipeline);
-                pass.dispatch_workgroups(heightmap_size[0] / WORKGROUP_SIZE, heightmap_size[1] / WORKGROUP_SIZE, 1);
-            }
-            TerrainMeshGenState::Update => {
-                let update_pipeline = pipeline_cache
-                    .get_compute_pipeline(pipeline.update_pipeline)
-                    .unwrap();
-                pass.set_pipeline(update_pipeline);
-                pass.dispatch_workgroups(heightmap_size[0] / WORKGROUP_SIZE, heightmap_size[1] / WORKGROUP_SIZE, 1);
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl Default for TerrainMeshGenNode {
-    fn default() -> Self {
-        Self {
-            state: TerrainMeshGenState::Loading,
-        }
-    }
-}
-
-#[derive(Resource)]
-pub struct TerrainMeshGenPipeline {
-    texture_bind_group_layout: BindGroupLayout,
-    init_pipeline: CachedComputePipelineId,
-    update_pipeline: CachedComputePipelineId,
-}
-
-impl FromWorld for TerrainMeshGenPipeline {
-    fn from_world(world: &mut World) -> Self {
-        let texture_bind_group_layout =
-            world
-                .resource::<RenderDevice>()
-                .create_bind_group_layout(&BindGroupLayoutDescriptor {
-                    label: None,
-                    entries: &[BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: ShaderStages::COMPUTE,
-                        ty: BindingType::StorageTexture {
-                            access: StorageTextureAccess::ReadWrite,
-                            format: TextureFormat::R8Unorm,
-                            view_dimension: TextureViewDimension::D2,
-                        },
-                        count: None,
-                    }],
-                });
-        let shader_path = PathBuf::new().join("shaders").join("terrain_mesh_gen.wgsl");
-        let shader = world
-            .resource::<AssetServer>()
-            .load(shader_path);
-        //TODO validate the shader exists
-        let pipeline_cache = world.resource::<PipelineCache>();
-        let init_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-            label: None,
-            layout: vec![texture_bind_group_layout.clone()],
-            push_constant_ranges: Vec::new(),
-            shader: shader.clone(),
-            shader_defs: vec![],
-            entry_point: Cow::from("init"),
-        });
-        let update_pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-            label: None,
-            layout: vec![texture_bind_group_layout.clone()],
-            push_constant_ranges: Vec::new(),
-            shader,
-            shader_defs: vec![],
-            entry_point: Cow::from("update"),
-        });
-
-        TerrainMeshGenPipeline {
-            texture_bind_group_layout,
-            init_pipeline,
-            update_pipeline,
-        }
-    }
-}
-
-fn prepare_bind_group(
-    mut commands: Commands,
-    pipeline: Res<TerrainMeshGenPipeline>,
-    gpu_images: Res<RenderAssets<Image>>,
-    heightmap: Option<Res<HeightmapImage>>,
-    render_device: Res<RenderDevice>,
-) {
-    if heightmap.is_none() {
-        return;
-    }
-    let view = gpu_images.get(&heightmap.unwrap().image).unwrap();
-    let bind_group = render_device.create_bind_group(
-        None,
-        &pipeline.texture_bind_group_layout,
-        &BindGroupEntries::single(&view.texture_view),
-    );
-    commands.insert_resource(HeightmapBindGroup(bind_group));
-}
+#[derive(Resource, Default, Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ExtractedGameState(pub GameState);
 
 pub fn generate_world_mesh(
     mut commands: Commands,
@@ -252,7 +44,10 @@ pub fn generate_world_mesh(
 
         for chunk_y in 0..world_size[0] {
             for chunk_x in 0..world_size[1] {
-                let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+                let mut grid_mesh = Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::RENDER_WORLD,
+                );
 
                 let mut vertices = Vec::new();
                 let mut uvs = Vec::new();
@@ -277,7 +72,7 @@ pub fn generate_world_mesh(
                 grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
                 grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 
-                grid_mesh.set_indices(Some(Indices::U32(indices)));
+                grid_mesh.insert_indices(Indices::U32(indices));
                 let mesh = mesh_assets.add(grid_mesh);
 
                 let material = terrain_texture_atlas.handle.clone();
@@ -289,8 +84,7 @@ pub fn generate_world_mesh(
                         ..Default::default()
                     })
                     .insert(WorldMesh)
-                    .insert(WorldEntity)
-                    .insert(RaycastMesh::<CameraRaycastSet>::default());
+                    .insert(WorldEntity);
             }
         }
         println!("World mesh generation took: {:?}", start_time.elapsed());
@@ -298,62 +92,6 @@ pub fn generate_world_mesh(
 }
 
 type MeshVecs = (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>);
-
-fn create_tree_mesh(
-    starting_position: [u32; 2],
-    heightmap: &Heightmap,
-    current_index: u32,
-) -> MeshVecs {
-    let cylinder = shape::Cylinder {
-        height: 1.0,
-        radius: 0.1,
-        resolution: 5,
-        segments: 1,
-        ..Default::default()
-    };
-    let mesh = Mesh::from(cylinder);
-    let mut positions = mesh
-        .attribute(Mesh::ATTRIBUTE_POSITION)
-        .unwrap()
-        .as_float3()
-        .unwrap()
-        .to_vec();
-    let height = heightmap[starting_position] as f32 * WORLD_HEIGHT_SCALE;
-
-    positions.iter_mut().for_each(|pos| {
-        pos[0] += starting_position[0] as f32;
-        pos[1] += height;
-        pos[2] += starting_position[1] as f32;
-    });
-
-    let normals = mesh
-        .attribute(Mesh::ATTRIBUTE_NORMAL)
-        .unwrap()
-        .as_float3()
-        .unwrap()
-        .to_vec();
-
-    let uvs = mesh
-        .attribute(Mesh::ATTRIBUTE_UV_0)
-        .unwrap()
-        .get_bytes()
-        .chunks_exact(4);
-    let uvs = uvs
-        .map(|uv| {
-            let uv = f32::from_ne_bytes([uv[0], uv[1], uv[2], uv[3]]);
-            [uv, uv]
-        })
-        .collect();
-
-    let indices = mesh
-        .indices()
-        .unwrap()
-        .iter()
-        .map(|x| x as u32 + current_index)
-        .collect_vec();
-
-    (positions, uvs, indices, normals)
-}
 
 fn create_terrain_mesh(
     starting_position: [u32; 2],
@@ -466,7 +204,7 @@ fn get_terrain_type(height: f32, steepness_angle: f32, rng: &mut StdRng) -> Terr
     terrain_type
 }
 
-pub fn generate_tree_mesh(
+/* pub fn generate_tree_mesh(
     mut commands: Commands,
     tree_mesh_query: Query<Entity, With<WorldMesh>>,
     heightmap: Res<Heightmap>,
@@ -483,7 +221,10 @@ pub fn generate_tree_mesh(
 
         for chunk_y in 0..world_size[0] {
             for chunk_x in 0..world_size[1] {
-                let mut grid_mesh = Mesh::new(PrimitiveTopology::TriangleList);
+                let mut grid_mesh = Mesh::new(
+                    PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::RENDER_WORLD,
+                );
 
                 let mut vertices = Vec::new();
                 let mut uvs = Vec::new();
@@ -514,7 +255,7 @@ pub fn generate_tree_mesh(
                 grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
                 grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 
-                grid_mesh.set_indices(Some(Indices::U32(indices)));
+                grid_mesh.insert_indices(Indices::U32(indices));
                 let mesh = mesh_assets.add(grid_mesh);
 
                 let material = terrain_texture_atlas.handle.clone();
@@ -531,3 +272,60 @@ pub fn generate_tree_mesh(
         }
     }
 }
+fn create_tree_mesh(
+    starting_position: [u32; 2],
+    heightmap: &Heightmap,
+    current_index: u32,
+) -> MeshVecs {
+    let cylinder = shape::Cylinder {
+        height: 1.0,
+        radius: 0.1,
+        resolution: 5,
+        segments: 1,
+        ..Default::default()
+    };
+    let mesh = Mesh::from(cylinder);
+    let mut positions = mesh
+        .attribute(Mesh::ATTRIBUTE_POSITION)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+    let height = heightmap[starting_position] as f32 * WORLD_HEIGHT_SCALE;
+
+    positions.iter_mut().for_each(|pos| {
+        pos[0] += starting_position[0] as f32;
+        pos[1] += height;
+        pos[2] += starting_position[1] as f32;
+    });
+
+    let normals = mesh
+        .attribute(Mesh::ATTRIBUTE_NORMAL)
+        .unwrap()
+        .as_float3()
+        .unwrap()
+        .to_vec();
+
+    let uvs = mesh
+        .attribute(Mesh::ATTRIBUTE_UV_0)
+        .unwrap()
+        .get_bytes()
+        .chunks_exact(4);
+    let uvs = uvs
+        .map(|uv| {
+            let uv = f32::from_ne_bytes([uv[0], uv[1], uv[2], uv[3]]);
+            [uv, uv]
+        })
+        .collect();
+
+    let indices = mesh
+        .indices()
+        .unwrap()
+        .iter()
+        .map(|x| x as u32 + current_index)
+        .collect_vec();
+
+    (positions, uvs, indices, normals)
+}
+
+ */

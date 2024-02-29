@@ -54,7 +54,7 @@ pub fn erode_heightmap(
                                 sum += heightmap[neighbour];
                                 length += 1;
                             }
-                            new_heightmap[[x, y]] = sum / length as f64;
+                            new_heightmap[[x, y]] = sum / length as f32;
                         }
                     }
                     *heightmap = new_heightmap;
@@ -106,9 +106,9 @@ pub fn erode_heightmap(
 const MAX_EROSION_STEPS: u32 = 500;
 struct WaterErosion<'a> {
     position: [u32; 2],
-    sediment: f64,
-    water: f64,
-    speed: f64,
+    sediment: f32,
+    water: f32,
+    speed: f32,
     direction: Vec2,
     heightmap: &'a mut Heightmap,
     radius: u32,
@@ -139,7 +139,7 @@ impl<'a> WaterErosion<'a> {
             radius,
         }
     }
-    fn deposit(&mut self, amount: f64) {
+    fn deposit(&mut self, amount: f32) {
         //Deposts sediment in a circle to prevent peaks
         //NOTE: After careful benchmarking, using raw for loops is faster than using iterators from get_circle.
         let [x, y] = self.position;
@@ -156,24 +156,24 @@ impl<'a> WaterErosion<'a> {
                         .distance(Vec2::from_array(neighbour.as_f32()))
                         as f64;
                     let deposition_amount =
-                        amount * fast_normal_approx(self.radius as f64, distance);
+                        amount * fast_normal_approx(self.radius as f64, distance) as f32;
                     self.heightmap[neighbour.as_u32()] += deposition_amount;
                 }
             }
         }
     }
-    fn erode(&mut self, amount: f64) {
+    fn erode(&mut self, amount: f32) {
         self.deposit(-amount);
     }
-    fn read(&self, position: [u32; 2]) -> f64 {
+    fn read(&self, position: [u32; 2]) -> f32 {
         self.heightmap[position]
     }
     pub fn simulate(mut self) {
         let debug = false;
-        let erosion_speed: f64 = 0.9;
+        let erosion_speed: f32 = 0.9;
         let gravity = 30.0;
-        let deposition_speed: f64 = 0.2;
-        let water_evaporation_speed: f64 = 0.0001;
+        let deposition_speed: f32 = 0.2;
+        let water_evaporation_speed: f32 = 0.0001;
         let minimum_slope = 0.01;
         let direction_inertia = 3.0;
         let carry_capacity_modifier = 2.0;
@@ -223,7 +223,7 @@ impl<'a> WaterErosion<'a> {
             let carry_capacity = height_difference.max(minimum_slope)
                 * self.speed
                 * self.water
-                * self.radius as f64
+                * self.radius as f32
                 * carry_capacity_modifier;
 
             //Deposition if evaporated or speed is negative

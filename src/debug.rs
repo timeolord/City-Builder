@@ -9,6 +9,8 @@ pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, fps_counter);
+    }
+    fn finish(&self, app: &mut App) {
         std::fs::create_dir_all("graphs").expect("Failed to create graphs directory");
         print_render_graph(app);
         print_schedule_graphs::<Update>(app, Update);
@@ -25,7 +27,7 @@ fn fps_counter(mut contexts: EguiContexts, diagnostics: Res<DiagnosticsStore>) {
         .title_bar(false)
         .show(ctx, |ui| {
             if let Some(fps) = diagnostics
-                .get(FrameTimeDiagnosticsPlugin::FPS)
+                .get(&FrameTimeDiagnosticsPlugin::FPS)
                 .and_then(|fps| fps.smoothed())
             {
                 ui.label(format!("FPS: {:.2}", fps));

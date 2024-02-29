@@ -2,7 +2,6 @@ use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
 };
-use bevy_mod_raycast::{deferred::DeferredRaycastingPlugin, prelude::RaycastSource};
 use smooth_bevy_cameras::{
     controllers::orbit::{
         ControlEvent, OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin,
@@ -12,7 +11,7 @@ use smooth_bevy_cameras::{
 
 use crate::{
     world::WorldEntity,
-    world_gen::{heightmap::Heightmap, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings, CHUNK_SIZE},
+    world_gen::{heightmap::{Heightmap}, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings, CHUNK_SIZE},
     GameState, DEBUG,
 };
 
@@ -29,14 +28,8 @@ impl Plugin for CameraPlugin {
             },
             LookTransformPlugin,
         ));
-        app.add_plugins(DeferredRaycastingPlugin::<CameraRaycastSet>::default());
         app.add_systems(OnEnter(GameState::World), setup);
-        app.add_systems(
-            Update,
-            (update_terrain_raycaster, input)
-                .chain()
-                .run_if(in_state(GameState::World)),
-        );
+        app.add_systems(Update, input.run_if(in_state(GameState::World)));
     }
 }
 
@@ -47,13 +40,13 @@ pub fn input(
     mut events: EventWriter<ControlEvent>,
     mut mouse_wheel_reader: EventReader<MouseWheel>,
     mut mouse_motion_events: EventReader<MouseMotion>,
-    mouse_buttons: Res<Input<MouseButton>>,
-    keyboard: Res<Input<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
-    terrain_raycaster: Query<&RaycastSource<CameraRaycastSet>, With<TerrainRaycaster>>,
     world_settings: Res<WorldSettings>,
     mut gizmos: Gizmos,
+    heightmap: Res<Heightmap>,
 ) {
     //Modified from smooth_bevy_cameras
     // Can only control one camera at a time.
@@ -96,24 +89,20 @@ pub fn input(
 
     let keyboard_translate_sensitivity = 0.01;
 
-    let mut has_moved = false;
-
     //Keyboard camera translation
-    if keyboard.pressed(KeyCode::W) {
+    if keyboard.pressed(KeyCode::KeyW) {
         let mut look_direction = transform.target - transform.eye;
         look_direction.y = 0.0;
         transform.target += look_direction.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye += look_direction.normalize() * keyboard_translate_sensitivity * distance;
-        has_moved = true;
     }
-    if keyboard.pressed(KeyCode::S) {
+    if keyboard.pressed(KeyCode::KeyS) {
         let mut look_direction = transform.target - transform.eye;
         look_direction.y = 0.0;
         transform.target -= look_direction.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye -= look_direction.normalize() * keyboard_translate_sensitivity * distance;
-        has_moved = true;
     }
-    if keyboard.pressed(KeyCode::A) {
+    if keyboard.pressed(KeyCode::KeyA) {
         let look_direction = transform.target - transform.eye;
         let left = Vec3 {
             x: look_direction.z,
@@ -122,9 +111,8 @@ pub fn input(
         };
         transform.target += left.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye += left.normalize() * keyboard_translate_sensitivity * distance;
-        has_moved = true;
     }
-    if keyboard.pressed(KeyCode::D) {
+    if keyboard.pressed(KeyCode::KeyD) {
         let look_direction = transform.target - transform.eye;
         let left = Vec3 {
             x: look_direction.z,
@@ -133,22 +121,10 @@ pub fn input(
         };
         transform.target -= left.normalize() * keyboard_translate_sensitivity * distance;
         transform.eye -= left.normalize() * keyboard_translate_sensitivity * distance;
-        has_moved = true;
     }
 
     if transform.eye.y < transform.target.y {
         transform.eye.y = transform.target.y;
-    }
-
-    if has_moved {
-        //Sets the height of the camera to the terrain
-        if let Ok(raycaster) = terrain_raycaster.get_single() {
-            raycaster.intersections().first().map(|(_, intersection)| {
-                let height_delta = intersection.position().y - transform.target.y;
-                transform.target.y += height_delta;
-                transform.eye.y += height_delta;
-            });
-        }
     }
 
     //Restrict Camera to world bounds
@@ -164,6 +140,9 @@ pub fn input(
     );
     transform.eye = transform.target + eye_delta;
 
+    //Set target y to terrain height
+    transform.target.y = heightmap.interpolate_height(transform.target.xz());
+    
     if DEBUG {
         gizmos.sphere(transform.target, Quat::IDENTITY, 0.1, Color::RED);
     }
@@ -181,24 +160,6 @@ pub fn input(
     events.send(ControlEvent::Zoom(scalar));
 }
 
-fn update_terrain_raycaster(
-    mut terrain_raycaster: Query<&mut Transform, With<TerrainRaycaster>>,
-    camera: Query<&LookTransform, With<OrbitCameraController>>,
-) {
-    if let Ok(mut terrain_transform) = terrain_raycaster.get_single_mut() {
-        if let Ok(camera_transform) = camera.get_single() {
-            let raycaster_position = [
-                camera_transform.target.x,
-                WORLD_HEIGHT_SCALE + 1.0,
-                camera_transform.target.z,
-            ];
-            let mut raycaster_transform = Transform::from_translation(raycaster_position.into());
-            raycaster_transform.look_at(camera_transform.target.into(), Vec3::Y);
-            *terrain_transform = raycaster_transform;
-        }
-    }
-}
-
 fn setup(mut commands: Commands, heightmap: Res<Heightmap>) {
     let orbit_camera_controller = OrbitCameraController {
         mouse_rotate_sensitivity: Vec2::splat(0.2),
@@ -212,25 +173,17 @@ fn setup(mut commands: Commands, heightmap: Res<Heightmap>) {
         heightmap[middle] as f32 * WORLD_HEIGHT_SCALE,
         middle[1] as f32,
     ];
+    let middle = [middle[0] as f32, 0.0, middle[1] as f32];
     let eye_offset: [f32; 3] = [10.0, 10.0, 0.0];
     let orbit_camera_bundle = OrbitCameraBundle::new(
         orbit_camera_controller,
         Into::<Vec3>::into(middle) + Into::<Vec3>::into(eye_offset),
         middle.into(),
-        Vec3::Y,
+        *Direction3d::Y,
     );
     //Spawn Camera
     commands
         .spawn((orbit_camera_bundle, WorldEntity))
         .insert(Camera3dBundle::default());
 
-    //Spawn Raycaster
-    let raycast_position = [middle[0], middle[1] + 1.0, middle[2]];
-    commands.spawn((
-        WorldEntity,
-        TerrainRaycaster,
-        SpatialBundle::default(),
-        Transform::from_translation(raycast_position.into()).look_at(middle.into(), Vec3::Y),
-        RaycastSource::<CameraRaycastSet>::new_transform_empty(),
-    ));
 }
