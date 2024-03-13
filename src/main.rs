@@ -47,7 +47,6 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
-        shaders::ComputeShaderPlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");

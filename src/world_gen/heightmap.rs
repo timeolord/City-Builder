@@ -1,6 +1,10 @@
-use std::ops::{Index, IndexMut};
+use std::{
+    ops::{Index, IndexMut},
+    sync::{Arc, RwLock},
+};
 
 use crate::{
+    shaders::{ComputeShaderResource, ComputeShaderRunType},
     utils::{
         direction::CardinalDirection,
         math::{bilinear_interpolation, AsI32, AsU32},
@@ -27,49 +31,20 @@ use super::{mesh_gen::WORLD_HEIGHT_SCALE, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
-    data: Array2D<f32>,
+    pub data: Vec<f32>,
     pub tree_density: Array2D<f64>,
+    size: WorldSize,
 }
 
-#[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
+#[derive(ExtractResource, Resource, Clone, Debug)]
 pub struct HeightmapImage {
-    #[storage_texture(0, visibility(compute), image_format = Rgba8Unorm, access = ReadWrite)]
     pub image: Handle<Image>,
-    /* #[storage_texture(1, visibility(compute), image_format = Rgba32Float, access = ReadWrite)]
-    pub vertices: Handle<Image>, */
-    #[storage(1, visibility(compute), buffer)]
-    pub buffer: Buffer,
-    /* #[storage(3, visibility(compute), buffer)] */
-    pub staging_buffer: Buffer,
-    #[uniform(2, visibility(compute))]
     pub size: UVec2,
-    #[uniform(3, visibility(compute))]
-    pub world_size: UVec2,
 }
-
-/* impl HeightmapImage {
-    pub fn new(size: WorldSize, image_assets: &mut Assets<Image>) -> Self {
-        let mut image = Image::new_fill(
-            Extent3d {
-                width: size[0],
-                height: size[1],
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            &[0, 0, 0, 255],
-            TextureFormat::Rgba8Unorm,
-        );
-        image.texture_descriptor.usage = TextureUsages::COPY_DST
-            | TextureUsages::STORAGE_BINDING
-            | TextureUsages::TEXTURE_BINDING;
-        let image = image_assets.add(image);
-        Self { image }
-    }
-} */
 
 impl Heightmap {
     pub fn new(size: WorldSize) -> Self {
-        Self {
+        /* Self {
             data: Array2D::filled_with(
                 0.0,
                 (size[0] * HEIGHTMAP_CHUNK_SIZE as u32) as usize,
@@ -80,14 +55,23 @@ impl Heightmap {
                 (size[0] * CHUNK_SIZE as u32) as usize,
                 (size[1] * CHUNK_SIZE as u32) as usize,
             ),
+        } */
+        Self {
+            data: vec![0.0; (size[0] * HEIGHTMAP_CHUNK_SIZE * size[1] * HEIGHTMAP_CHUNK_SIZE) as usize],
+            tree_density: Array2D::filled_with(
+                0.5,
+                (size[0] * CHUNK_SIZE as u32) as usize,
+                (size[1] * CHUNK_SIZE as u32) as usize,
+            ),
+            size: [size[0] * HEIGHTMAP_CHUNK_SIZE, size[1] * HEIGHTMAP_CHUNK_SIZE],
         }
     }
     pub fn get<N: Integer + AsPrimitive<usize>, T: Into<[N; 2]>>(&self, point: T) -> Option<f32> {
         let point = point.into();
-        self.data.get(point[0].as_(), point[1].as_()).copied()
+        self.data.get(point[0].as_() * self.size[1] as usize + point[1].as_()).copied()
     }
     pub fn size(&self) -> WorldSize {
-        [self.data.num_rows() as u32, self.data.num_columns() as u32]
+        [self.size[0], self.size[1]]
     }
     pub fn tree_density(&self, point: [u32; 2]) -> f64 {
         self.tree_density[(point[0] as usize, point[1] as usize)]
@@ -128,9 +112,6 @@ impl Heightmap {
             | TextureUsages::STORAGE_BINDING
             | TextureUsages::TEXTURE_BINDING;
         image
-    }
-    pub fn as_vec(&self) -> Vec<f32> {
-        self.data.as_column_major().to_vec()
     }
     pub fn interpolate_height(&self, position: Vec2) -> f32 {
         let fractional_position = position.xy().fract();
@@ -193,7 +174,6 @@ impl From<Heightmap> for RgbaImage {
             height,
             heightmap
                 .data
-                .as_column_major()
                 .iter()
                 .map(|&x| [(x * 255.0) as u8, (x * 255.0) as u8, (x * 255.0) as u8, 255])
                 .flatten()
@@ -206,18 +186,23 @@ impl Index<UVec2> for Heightmap {
     type Output = f32;
 
     fn index(&self, index: UVec2) -> &Self::Output {
-        &self.data[(index.x as usize, index.y as usize)]
+        &self[index.to_array()]
+    }
+}
+impl IndexMut<UVec2> for Heightmap {
+    fn index_mut(&mut self, index: UVec2) -> &mut Self::Output {
+        &mut self[index.to_array()]
     }
 }
 impl Index<[u32; 2]> for Heightmap {
     type Output = f32;
 
     fn index(&self, index: [u32; 2]) -> &Self::Output {
-        &self.data[(index[0] as usize, index[1] as usize)]
+        &self.data[index[0] as usize * self.size[1] as usize + index[1] as usize]
     }
 }
 impl IndexMut<[u32; 2]> for Heightmap {
     fn index_mut(&mut self, index: [u32; 2]) -> &mut Self::Output {
-        &mut self.data[(index[0] as usize, index[1] as usize)]
+        &mut self.data[index[0] as usize * self.size[1] as usize + index[1] as usize]
     }
 }

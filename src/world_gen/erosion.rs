@@ -1,22 +1,251 @@
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::{
+        render_resource::{
+            Buffer, BufferDescriptor, BufferInitDescriptor, BufferUsages, ShaderType,
+        },
+        renderer::RenderDevice,
+    },
+};
 
+use image::EncodableLayout;
 use itertools::Itertools;
 
 use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, Uniform};
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    mem::swap,
+    sync::{Arc, RwLock},
+};
 
-use crate::utils::math::{fast_normal_approx, AsF32, AsU32};
+use crate::{
+    shaders::{ComputeShaderResource, ComputeShaderRunType},
+    utils::math::{fast_normal_approx, AsF32, AsU32},
+};
 
-use super::{heightmap::Heightmap, HeightmapLoadBar, WorldSettings, HEIGHTMAP_CHUNK_SIZE};
-
+use super::{
+    heightmap::{Heightmap, HeightmapImage},
+    HeightmapLoadBar, WorldSettings, HEIGHTMAP_CHUNK_SIZE,
+};
+use bevy::render::extract_resource::ExtractResource;
+use bevy::render::render_resource::AsBindGroup;
 use std::time::Instant;
 
-pub const MAX_DROPLET_SIZE: u32 = 8;
+pub const MAX_DROPLET_SIZE: u32 = 12;
 pub const MIN_DROPLET_SIZE: u32 = 2;
+pub const WORKGROUP_SIZE: u64 = 64;
+
+#[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
+pub struct ComputeErosion {
+    #[storage(0, visibility(compute))]
+    pub droplets: Vec<Droplet>,
+    #[storage(1, visibility(compute), buffer)]
+    pub results: Buffer,
+    #[uniform(2, visibility(compute))]
+    pub size: UVec2,
+    #[uniform(3, visibility(compute))]
+    pub world_size: UVec2,
+    pub result_bytes: Arc<RwLock<Vec<u8>>>,
+    pub dispatch_size: [u32; 3],
+    pub run_condition: Arc<RwLock<ComputeShaderRunType>>,
+}
+impl ComputeErosion {
+    pub fn stop_and_clean_up(&mut self) {
+        self.cleanup();
+        self.droplets = vec![];
+    }
+}
+
+impl ComputeShaderResource for ComputeErosion {
+    fn result_buffer(&self) -> &Buffer {
+        &self.results
+    }
+    fn mapped_bytes(&self) -> &Arc<RwLock<Vec<u8>>> {
+        &self.result_bytes
+    }
+    fn dispatch_size(&self) -> [u32; 3] {
+        self.dispatch_size
+    }
+    fn run_condition(&self) -> &Arc<RwLock<ComputeShaderRunType>> {
+        &self.run_condition
+    }
+}
 
 #[derive(Event)]
 pub struct ErosionEvent;
+
+pub fn gpu_erode_heightmap(
+    mut commands: Commands,
+    render_device: Res<RenderDevice>,
+    mut heightmap: ResMut<Heightmap>,
+    heightmap_image: Res<HeightmapImage>,
+    image_assets: ResMut<Assets<Image>>,
+    settings: Res<WorldSettings>,
+    mut heightmap_load_bar: ResMut<HeightmapLoadBar>,
+    mut erosion_counter: Local<u32>,
+    mut erosion_event: EventReader<ErosionEvent>,
+    mut working: Local<bool>,
+    mut benchmark: Local<Option<Instant>>,
+    mut compute_erosion: Option<ResMut<ComputeErosion>>,
+    mut heightmap_bytes: Local<Vec<u8>>,
+    mut heightmap_floats: Local<Vec<f32>>,
+    mut rng: Local<Option<StdRng>>,
+) {
+    let erosion_chunks = settings.erosion_amount;
+    let dispatch_size = 16;
+    let erosion_chunk_size = dispatch_size as u64 * WORKGROUP_SIZE;
+
+    if erosion_event.read().count() > 0 {
+        if let Some(compute_erosion) = compute_erosion.as_mut() {
+            compute_erosion.stop_and_clean_up();
+        }
+        let image_length = image_assets
+            .get(heightmap_image.image.clone())
+            .unwrap()
+            .data
+            .len();
+        *heightmap_bytes = vec![0u8; image_length];
+        *heightmap_floats = vec![0.0; image_length / 4];
+        //Initalize Erosion Resource
+        let results = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("Erosion Result Buffer"),
+            contents: heightmap.data.as_bytes(),
+            usage: BufferUsages::COPY_SRC | BufferUsages::STORAGE,
+        });
+        let result_bytes: Arc<RwLock<Vec<u8>>> = Arc::new(RwLock::new(vec![0u8; image_length]));
+        let droplets = vec![Droplet::default(); dispatch_size as usize * WORKGROUP_SIZE as usize];
+        commands.insert_resource(ComputeErosion {
+            droplets,
+            results,
+            size: heightmap.size().into(),
+            world_size: settings.tile_world_size().into(),
+            result_bytes,
+            dispatch_size: [dispatch_size, 1, 1],
+            run_condition: Arc::new(RwLock::new(ComputeShaderRunType::EveryFrame)),
+        });
+        *rng = Some(StdRng::seed_from_u64(settings.noise_settings.seed as u64));
+
+        *erosion_counter = erosion_chunks;
+        heightmap_load_bar.erosion_progress = 0.0;
+        *working = true;
+        *benchmark = Some(Instant::now());
+        //Wait 1 frame for the compute erosion resource to be created
+    } else if *working {
+        if *erosion_counter == 0 {
+            //This will read from the work done the previous frame
+            for (index, byte) in compute_erosion
+                .as_ref()
+                .unwrap()
+                .result_bytes
+                .read()
+                .unwrap()
+                .chunks_exact(4)
+                .enumerate()
+            {
+                heightmap_floats[index] = f32::from_ne_bytes([byte[0], byte[1], byte[2], byte[3]]);
+            }
+            swap(&mut *heightmap_floats, &mut heightmap.data);
+
+            //Smooth the heightmap
+            for _ in 0..2 {
+                let mut new_heightmap = heightmap.clone();
+                for x in 0..heightmap.size()[0] {
+                    for y in 0..heightmap.size()[1] {
+                        let neighbours = heightmap.get_circle([x, y], 1);
+                        let mut sum = 0.0;
+                        let mut length = 0;
+                        for neighbour in neighbours {
+                            sum += heightmap[neighbour];
+                            length += 1;
+                        }
+                        new_heightmap[[x, y]] = sum / length as f32;
+                    }
+                }
+                *heightmap = new_heightmap;
+            }
+
+            //Blur the heightmap in parts where it has erosion artifacts
+            for _ in 0..10 {
+                let radius = 2;
+                let mut new_heightmap = heightmap.clone();
+                for x in 0..(heightmap.size()[0] / radius) {
+                    for y in 0..(heightmap.size()[1] / radius) {
+                        let neighbours = heightmap.get_circle([x, y], radius);
+                        let mut max_height_delta = 0.0f32;
+                        for neighbour in neighbours.clone() {
+                            let height_delta = (heightmap[[x, y]] - heightmap[neighbour]).abs();
+                            max_height_delta = max_height_delta.max(height_delta)
+                        }
+                        if max_height_delta > 0.1 {
+                            let mut sum = 0.0;
+                            let mut length = 0;
+                            for neighbour in neighbours {
+                                sum += heightmap[neighbour];
+                                length += 1;
+                            }
+                            new_heightmap[[x, y]] = sum / length as f32;
+                        }
+                    }
+                }
+                *heightmap = new_heightmap;
+            }
+            heightmap_load_bar.erosion_progress = 1.0;
+            *working = false;
+            compute_erosion.as_mut().unwrap().stop_and_clean_up();
+            *heightmap_bytes = vec![];
+            *heightmap_floats = vec![];
+            println!(
+                "Erosion took: {:?}",
+                Instant::now().duration_since(benchmark.unwrap())
+            );
+        } else {
+            let world_size = settings.noise_settings.world_size;
+            let map_size = [
+                (world_size[0] * HEIGHTMAP_CHUNK_SIZE),
+                (world_size[1] * HEIGHTMAP_CHUNK_SIZE),
+            ];
+
+            let position_sampler = Uniform::new(0, map_size[0]);
+            let radius_sampler = Uniform::new_inclusive(MIN_DROPLET_SIZE, MAX_DROPLET_SIZE);
+            let direction_sampler = Uniform::new_inclusive(0, 1);
+            let droplets = &mut compute_erosion.as_mut().unwrap().droplets;
+            let rng = rng.as_mut().unwrap();
+
+            for index in 0..erosion_chunk_size as usize {
+                let droplet = Droplet {
+                    position_x: position_sampler.sample(rng),
+                    position_y: position_sampler.sample(rng),
+                    radius: radius_sampler.sample(rng),
+                    sediment: 0.0,
+                    water: 1.0,
+                    speed: 0.0,
+                    direction_x: direction_sampler.sample(rng) as f32,
+                    direction_y: direction_sampler.sample(rng) as f32,
+                };
+                droplets[index] = droplet;
+            }
+
+            //This doesn't read from the gpu every frame, since we only need the result for updating the heightmap image, and at the end of the erosion process
+
+            heightmap_load_bar.erosion_progress += 1.0 / erosion_chunks as f32;
+            *erosion_counter = erosion_counter.saturating_sub(1);
+        }
+    }
+}
+
+#[derive(Debug, Clone, ShaderType, Default)]
+#[repr(C)]
+pub struct Droplet {
+    position_x: u32,
+    position_y: u32,
+    radius: u32,
+    sediment: f32,
+    water: f32,
+    speed: f32,
+    direction_x: f32,
+    direction_y: f32,
+}
 
 pub fn erode_heightmap(
     mut heightmap: ResMut<Heightmap>,

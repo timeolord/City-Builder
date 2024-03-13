@@ -11,7 +11,7 @@ use smooth_bevy_cameras::{
 
 use crate::{
     world::WorldEntity,
-    world_gen::{heightmap::{Heightmap}, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings, CHUNK_SIZE},
+    world_gen::{heightmap::Heightmap, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings, CHUNK_SIZE},
     GameState, DEBUG,
 };
 
@@ -127,8 +127,24 @@ pub fn input(
         transform.eye.y = transform.target.y;
     }
 
-    //Restrict Camera to world bounds
     let world_size = world_settings.world_size;
+
+    //Keep camera above terrain height
+    /* let world_size = [
+        CHUNK_SIZE as f32 * 0.5,
+        ((world_size[1]) * CHUNK_SIZE) as f32 - (CHUNK_SIZE as f32 * 0.5),
+    ]; */
+    if (transform.eye.x > 0.0 && transform.eye.x < world_size[1] as f32 * CHUNK_SIZE as f32)
+        && (transform.eye.z > 0.0 && transform.eye.z < world_size[1] as f32 * CHUNK_SIZE as f32)
+    {
+        let terrain_height = heightmap.interpolate_height(transform.eye.xz()) + 1.5;
+        if transform.eye.y < terrain_height {
+            transform.eye.y = terrain_height;
+        }
+    }
+
+    let world_size = world_settings.world_size;
+    //Restrict Camera to world bounds
     let eye_delta = transform.eye - transform.target;
     transform.target.x = transform.target.x.clamp(
         CHUNK_SIZE as f32 * 0.5,
@@ -142,7 +158,7 @@ pub fn input(
 
     //Set target y to terrain height
     transform.target.y = heightmap.interpolate_height(transform.target.xz());
-    
+
     if DEBUG {
         gizmos.sphere(transform.target, Quat::IDENTITY, 0.1, Color::RED);
     }
@@ -185,5 +201,4 @@ fn setup(mut commands: Commands, heightmap: Res<Heightmap>) {
     commands
         .spawn((orbit_camera_bundle, WorldEntity))
         .insert(Camera3dBundle::default());
-
 }

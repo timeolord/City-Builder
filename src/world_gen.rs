@@ -1,14 +1,13 @@
 use std::{
-    mem,
     path::{Path, PathBuf},
+    sync::{Arc, RwLock},
 };
 
 use bevy::{
     prelude::*,
     render::{
-        render_resource::{
-            BufferDescriptor, BufferUsages,
-        },
+        extract_resource::ExtractResourcePlugin,
+        render_resource::{BufferDescriptor, BufferUsages},
         renderer::RenderDevice,
     },
     tasks::{block_on, AsyncComputeTaskPool, Task},
@@ -24,12 +23,13 @@ pub mod terrain_material;
 
 use crate::{
     save::{save_path, SaveEvent},
+    shaders::{ComputeShaderRunType, ComputeShaderWorker},
     utils::math::AsF32,
     GameState,
 };
 
 use self::{
-    erosion::{erode_heightmap, ErosionEvent},
+    erosion::{erode_heightmap, gpu_erode_heightmap, ComputeErosion, ErosionEvent},
     heightmap::{Heightmap, HeightmapImage},
     mesh_gen::generate_world_mesh,
     noise_gen::{noise_function, NoiseFunction, NoiseSettings},
@@ -51,19 +51,23 @@ pub struct WorldGenPlugin;
 impl Plugin for WorldGenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ErosionEvent>();
+        app.add_plugins(<ComputeShaderWorker<ComputeErosion>>::plugin(
+            "terrain_erosion.wgsl",
+        ));
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
             (
                 generate_heightmap,
-                erode_heightmap,
-                display_ui.run_if(resource_exists::<HeightmapImage>),
+                gpu_erode_heightmap,
+                /* erode_heightmap, */
+                display_ui,
             )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
         app.add_systems(
             PostUpdate,
-            update_heightmap_image.run_if(resource_exists::<Heightmap>),
+            update_heightmap_image.run_if(in_state(GameState::WorldGeneration)),
         );
         app.add_systems(
             Update,
@@ -79,60 +83,39 @@ pub const CHUNK_SIZE: u32 = 128;
 pub const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
 
 fn update_heightmap_image(
-    mut commands: Commands,
-    heightmap: ResMut<Heightmap>,
-    world_settings: Res<WorldSettings>,
-    heightmap_image: Option<ResMut<HeightmapImage>>,
-    render_device: Res<RenderDevice>,
+    mut heightmap: ResMut<Heightmap>,
+    heightmap_image: ResMut<HeightmapImage>,
+    progress_bar: Res<HeightmapLoadBar>,
+    compute_erosion: Option<ResMut<ComputeErosion>>,
     mut image_assets: ResMut<Assets<Image>>,
     mut counter: Local<u8>,
 ) {
     *counter = counter.saturating_add(1);
-    if heightmap_image.is_none() {
-        /* let pixel = [0.25f32, 0.5, 0.75, 1.0];
-        let pixel_bytes = pixel.map(|x| x.to_ne_bytes()); */
-        /* let mut vertices_image = Image::new_fill(
-            Extent3d {
-                width: heightmap.size()[0],
-                height: heightmap.size()[1],
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            pixel_bytes.flatten(),
-            TextureFormat::Rgba32Float,
-            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
-        );
-        vertices_image.texture_descriptor.usage = TextureUsages::COPY_DST | TextureUsages::COPY_SRC
-            | TextureUsages::STORAGE_BINDING
-            | TextureUsages::TEXTURE_BINDING; */
-        let vertices_length =
-            (heightmap.size()[0] * heightmap.size()[1] * 4 * 3 * mem::size_of::<f32>() as u32)
-                as u64;
-        println!("Vertices Length: {}", vertices_length);
-        /* println!("Vertices Length: {}, {}", vertices_length, vertices_image.data.len() as u64); */
-        let buffer = render_device.create_buffer(&BufferDescriptor {
-            label: Some("Heightmap Vertices Buffer"),
-            size: vertices_length,
-            usage: BufferUsages::COPY_SRC | BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
-        let staging_buffer = render_device.create_buffer(&BufferDescriptor {
-            label: Some("Heightmap Vertices Staging Buffer"),
-            size: vertices_length,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        commands.insert_resource(HeightmapImage {
-            image: image_assets.add(heightmap.clone().as_bevy_image()),
-            /* vertices: image_assets.add(vertices_image), */
-            size: heightmap.size().into(),
-            world_size: world_settings.tile_world_size().into(),
-            buffer,
-            staging_buffer,
-        });
-    } else if heightmap.is_changed() && *counter > 10 {
+    if *counter > 5 || progress_bar.heightmap_progress < 1.0 {
+        //Updates the heightmap image every five frames from the erosion gpu buffer if its avaliable
+        if let Some(compute_erosion) = compute_erosion.as_ref() {
+            match *compute_erosion.run_condition.as_ref().read().unwrap() {
+                ComputeShaderRunType::Never | ComputeShaderRunType::CleanUp => {
+                    return;
+                }
+                ComputeShaderRunType::EveryFrame | ComputeShaderRunType::Once => {
+                    for (index, byte) in compute_erosion
+                        .as_ref()
+                        .result_bytes
+                        .read()
+                        .unwrap()
+                        .chunks_exact(4)
+                        .enumerate()
+                    {
+                        heightmap.data[index] =
+                            f32::from_ne_bytes([byte[0], byte[1], byte[2], byte[3]]);
+                    }
+                }
+            }
+        }
+
         let old_image = image_assets
-            .get_mut(heightmap_image.as_ref().unwrap().image.clone_weak())
+            .get_mut(heightmap_image.image.clone_weak())
             .unwrap();
         let new_image = heightmap.clone().as_bevy_image();
         *old_image = new_image;
@@ -153,7 +136,7 @@ impl Default for WorldSettings {
         Self {
             world_size,
             noise_settings: NoiseSettings::new(world_size),
-            erosion_amount: 500,
+            erosion_amount: 50,
         }
     }
 }
@@ -181,9 +164,14 @@ impl HeightmapLoadBar {
     }
 }
 
-fn init(mut commands: Commands) {
+fn init(mut commands: Commands, mut image_assets: ResMut<Assets<Image>>) {
     commands.init_resource::<WorldSettings>();
-    commands.insert_resource(Heightmap::new(WorldSettings::default().world_size));
+    let heightmap = Heightmap::new(WorldSettings::default().world_size);
+    commands.insert_resource(HeightmapImage {
+        image: image_assets.add(heightmap.clone().as_bevy_image()),
+        size: heightmap.size().into(),
+    });
+    commands.insert_resource(heightmap);
     commands.init_resource::<HeightmapLoadBar>();
 }
 
@@ -276,16 +264,6 @@ fn display_ui(
         *egui_heightmap_image_handle = Some(heightmap_egui_handle);
     }
 
-    /* //Update the image if the heightmap has changed every 30 frames
-    if heightmap.is_changed() && (*frame_counter > 30 || heightmap_load_bar.progress() >= 1.0) {
-        let heightmap_image = heightmap.clone().as_bevy_image();
-        let heightmap_bevy_handle = asset_server
-            .get_mut(bevy_heightmap_image_handle.as_ref().unwrap().clone())
-            .unwrap();
-        *heightmap_bevy_handle = heightmap_image;
-        *frame_counter = 0;
-    } */
-
     if seed_string.is_empty() {
         *seed_string = world_settings.noise_settings.seed.to_string();
     }
@@ -344,7 +322,7 @@ fn display_ui(
 
                     ui.label("Erosion");
                     ui.add(
-                        egui::Slider::new(&mut world_settings.erosion_amount, 0..=1000)
+                        egui::Slider::new(&mut world_settings.erosion_amount, 0..=100)
                             .clamp_to_range(true),
                     );
                     ui.end_row();
