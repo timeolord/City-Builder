@@ -23,7 +23,6 @@ use std::{
 };
 
 use crate::{
-    shaders::{ComputeShaderResource, ComputeShaderRunType},
     utils::math::{fast_normal_approx, AsF32, AsU32},
 };
 
@@ -38,10 +37,14 @@ use std::time::Instant;
 
 pub const MAX_DROPLET_SIZE: u32 = 12;
 pub const MIN_DROPLET_SIZE: u32 = 2;
-pub const WORKGROUP_SIZE: u64 = 64;
-pub const DISPATCH_SIZE: u64 = 16;
+pub const EROSION_WORKGROUP_SIZE: u64 = 64;
+pub const EROSION_DISPATCH_SIZE: u64 = 16;
+pub const MAX_EROSION_STEPS: u64 = 500;
 
-#[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
+#[derive(Event)]
+pub struct ErosionEvent;
+
+/* #[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
 pub struct ComputeErosion {
     #[storage(0, visibility(compute))]
     pub droplets: Vec<Droplet>,
@@ -77,8 +80,7 @@ impl ComputeShaderResource for ComputeErosion {
     }
 }
 
-#[derive(Event)]
-pub struct ErosionEvent;
+
 
 pub fn gpu_erode_heightmap(
     mut commands: Commands,
@@ -235,7 +237,7 @@ pub fn gpu_erode_heightmap(
             *erosion_counter = erosion_counter.saturating_sub(1);
         }
     }
-}
+} */
 
 #[derive(Debug, Clone, ShaderType, Default)]
 #[repr(C)]

@@ -4,7 +4,6 @@ use std::{
 };
 
 use crate::{
-    shaders::{ComputeShaderResource, ComputeShaderRunType},
     utils::{
         direction::CardinalDirection,
         math::{bilinear_interpolation, AsI32, AsU32},

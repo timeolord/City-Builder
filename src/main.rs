@@ -7,7 +7,6 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::module_name_repetitions)]
 /* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] */
-#![feature(slice_flatten)]
 
 //! A simple 3D scene with light shining over a cube sitting on a plane.
 mod assets;
@@ -15,10 +14,10 @@ mod camera;
 mod debug;
 mod menu;
 mod save;
-mod shaders;
 mod utils;
 mod world;
 mod world_gen;
+mod shader_preprocessing;
 
 use crate::assets::asset_loader;
 
@@ -27,6 +26,7 @@ use bevy::{
 };
 use bevy_app_compute::prelude::AppComputePlugin;
 use bevy_egui::EguiPlugin;
+use shader_preprocessing::create_shader_constants;
 use std::env;
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
@@ -41,6 +41,8 @@ enum GameState {
 pub const DEBUG: bool = cfg!(debug_assertions);
 
 fn main() {
+    create_shader_constants();
+
     let plugins = (
         camera::CameraPlugin,
         menu::MenuPlugin,

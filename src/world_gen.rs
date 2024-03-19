@@ -25,14 +25,13 @@ pub mod consts;
 
 use crate::{
     save::{save_path, SaveEvent},
-    shaders::{ComputeShaderRunType, ComputeShaderWorker},
     utils::math::AsF32,
     GameState,
 };
 
 use self::{
     consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE}, erosion::{
-        gpu_erode_heightmap, test_compute, ComputeErosion, ErosionComputeWorker, ErosionEvent,
+        /* gpu_erode_heightmap, */ test_compute, /* ComputeErosion, */ ErosionComputeWorker, ErosionEvent,
     }, heightmap::{Heightmap, HeightmapImage}, mesh_gen::generate_world_mesh, noise_gen::{noise_function, NoiseFunction, NoiseSettings}
 };
 use bevy_egui::{
@@ -52,26 +51,23 @@ pub struct WorldGenPlugin;
 impl Plugin for WorldGenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ErosionEvent>();
-        app.add_plugins(<ComputeShaderWorker<ComputeErosion>>::plugin(
-            "terrain_erosion.wgsl",
-        ));
         app.add_plugins(AppComputeWorkerPlugin::<ErosionComputeWorker>::default());
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
             (
                 generate_heightmap,
-                gpu_erode_heightmap,
+                /* gpu_erode_heightmap, */
                 test_compute,
                 /* erode_heightmap, */
                 display_ui,
             )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
-        app.add_systems(
+        /* app.add_systems(
             PostUpdate,
             update_heightmap_image.run_if(in_state(GameState::WorldGeneration)),
-        );
+        ); */
         app.add_systems(
             Update,
             (generate_world_mesh).run_if(in_state(GameState::World)),
@@ -80,7 +76,7 @@ impl Plugin for WorldGenPlugin {
     }
 }
 
-fn update_heightmap_image(
+/* fn update_heightmap_image(
     mut heightmap: ResMut<Heightmap>,
     heightmap_image: ResMut<HeightmapImage>,
     progress_bar: Res<HeightmapLoadBar>,
@@ -119,7 +115,7 @@ fn update_heightmap_image(
         *old_image = new_image;
         *counter = 0;
     }
-}
+} */
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {

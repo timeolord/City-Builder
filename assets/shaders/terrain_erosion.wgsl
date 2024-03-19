@@ -1,5 +1,7 @@
-const MAX_EROSION_STEPS = 500;
-const DROPLET_ARRAY_SIZE = 64 * 16;
+#import shader_prelude
+
+const $MAX_EROSION_STEPS$ = 500;
+const DROPLET_ARRAY_SIZE = $WORKGROUP_SIZE$ * $DISPATCH_SIZE$;
 @group(0) @binding(0)
 var<storage, read_write> droplets: array<Droplet, DROPLET_ARRAY_SIZE>;
 @group(0) @binding(1)
@@ -20,7 +22,6 @@ struct Droplet {
     direction_y: f32,
 }
 
-const pi = 3.14159265359;
 const erosion_speed: f32 = 0.2;
 const gravity: f32 = 20.0;
 const deposition_speed: f32 = 0.2;
@@ -29,7 +30,7 @@ const minimum_slope: f32 = 0.01;
 const direction_inertia: f32 = 3.0;
 const carry_capacity_modifier: f32 = 1.0;
 
-@compute @workgroup_size(64, 1, 1)
+@compute @workgroup_size($WORKGROUP_SIZE$, 1, 1)
 fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
     let droplet_index = invocation_id.x;
     erosion(droplet_index);
@@ -128,7 +129,7 @@ fn fast_normal_approx(a: f32, x: f32) -> f32 {
 }
 
 fn normal_curve(mean: f32, std_dev: f32, x: f32) -> f32 {
-    let a = 1.0 / sqrt(std_dev * (2.0 * pi));
+    let a = 1.0 / sqrt(std_dev * (2.0 * PI));
     let b = (-0.5) * pow((x - mean) / std_dev, 2.0);
     return a * exp(b);
 }
