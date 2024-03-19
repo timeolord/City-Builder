@@ -5,9 +5,9 @@ use noise::*;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use crate::world::WorldSize;
-
 use self::circle_noise::CircleNoise;
+
+use super::consts::CHUNK_WORLD_SIZE;
 
 #[derive(Clone, Copy)]
 pub struct NoiseGenerator<Noise> {
@@ -37,16 +37,6 @@ pub struct NoiseSettings {
     pub mountain_amount: u32,
     pub mountain_size: f64,
     pub hilliness: f64,
-    pub world_size: WorldSize,
-}
-
-impl NoiseSettings {
-    pub fn new(world_size: WorldSize) -> Self {
-        Self {
-            world_size,
-            ..Default::default()
-        }
-    }
 }
 
 impl PartialEq for NoiseSettings {
@@ -66,7 +56,6 @@ impl Default for NoiseSettings {
             mountain_amount: 1,
             mountain_size: 100.0,
             hilliness: 0.5,
-            world_size: [0, 0],
         }
     }
 }
@@ -104,7 +93,7 @@ pub fn noise_function(settings: NoiseSettings) -> impl NoiseFunction {
         seed,
         settings.mountain_amount,
         settings.mountain_size,
-        settings.world_size,
+        CHUNK_WORLD_SIZE,
         1.0,
     );
 

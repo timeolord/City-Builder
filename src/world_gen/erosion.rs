@@ -2,12 +2,15 @@ use bevy::{
     prelude::*,
     render::{
         render_resource::{
-            Buffer, BufferDescriptor, BufferInitDescriptor, BufferUsages, ShaderType,
+            Buffer, BufferDescriptor, BufferInitDescriptor, BufferUsages, ShaderRef, ShaderType,
         },
         renderer::RenderDevice,
     },
 };
 
+use bevy_app_compute::prelude::{
+    AppComputeWorker, AppComputeWorkerBuilder, ComputeShader, ComputeWorker,
+};
 use image::EncodableLayout;
 use itertools::Itertools;
 
@@ -15,7 +18,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, Uniform};
 use std::{
     fmt::Debug,
-    mem::swap,
+    mem::{size_of, swap},
     sync::{Arc, RwLock},
 };
 
@@ -25,6 +28,7 @@ use crate::{
 };
 
 use super::{
+    consts::{CHUNK_WORLD_SIZE, TILE_WORLD_SIZE},
     heightmap::{Heightmap, HeightmapImage},
     HeightmapLoadBar, WorldSettings, HEIGHTMAP_CHUNK_SIZE,
 };
@@ -35,6 +39,7 @@ use std::time::Instant;
 pub const MAX_DROPLET_SIZE: u32 = 12;
 pub const MIN_DROPLET_SIZE: u32 = 2;
 pub const WORKGROUP_SIZE: u64 = 64;
+pub const DISPATCH_SIZE: u64 = 16;
 
 #[derive(ExtractResource, AsBindGroup, Resource, Clone, Debug)]
 pub struct ComputeErosion {
@@ -93,8 +98,7 @@ pub fn gpu_erode_heightmap(
     mut rng: Local<Option<StdRng>>,
 ) {
     let erosion_chunks = settings.erosion_amount;
-    let dispatch_size = 16;
-    let erosion_chunk_size = dispatch_size as u64 * WORKGROUP_SIZE;
+    let erosion_chunk_size = DISPATCH_SIZE * WORKGROUP_SIZE;
 
     if erosion_event.read().count() > 0 {
         if let Some(compute_erosion) = compute_erosion.as_mut() {
@@ -114,14 +118,14 @@ pub fn gpu_erode_heightmap(
             usage: BufferUsages::COPY_SRC | BufferUsages::STORAGE,
         });
         let result_bytes: Arc<RwLock<Vec<u8>>> = Arc::new(RwLock::new(vec![0u8; image_length]));
-        let droplets = vec![Droplet::default(); dispatch_size as usize * WORKGROUP_SIZE as usize];
+        let droplets = vec![Droplet::default(); DISPATCH_SIZE as usize * WORKGROUP_SIZE as usize];
         commands.insert_resource(ComputeErosion {
             droplets,
             results,
             size: heightmap.size().into(),
-            world_size: settings.tile_world_size().into(),
+            world_size: TILE_WORLD_SIZE.into(),
             result_bytes,
-            dispatch_size: [dispatch_size, 1, 1],
+            dispatch_size: [DISPATCH_SIZE as u32, 1, 1],
             run_condition: Arc::new(RwLock::new(ComputeShaderRunType::EveryFrame)),
         });
         *rng = Some(StdRng::seed_from_u64(settings.noise_settings.seed as u64));
@@ -200,10 +204,9 @@ pub fn gpu_erode_heightmap(
                 Instant::now().duration_since(benchmark.unwrap())
             );
         } else {
-            let world_size = settings.noise_settings.world_size;
             let map_size = [
-                (world_size[0] * HEIGHTMAP_CHUNK_SIZE),
-                (world_size[1] * HEIGHTMAP_CHUNK_SIZE),
+                (CHUNK_WORLD_SIZE[0] * HEIGHTMAP_CHUNK_SIZE),
+                (CHUNK_WORLD_SIZE[1] * HEIGHTMAP_CHUNK_SIZE),
             ];
 
             let position_sampler = Uniform::new(0, map_size[0]);
@@ -247,7 +250,48 @@ pub struct Droplet {
     direction_y: f32,
 }
 
-pub fn erode_heightmap(
+#[derive(TypePath)]
+struct ErosionShader;
+
+impl ComputeShader for ErosionShader {
+    fn shader() -> ShaderRef {
+        "shaders/test.wgsl".into()
+    }
+}
+
+#[derive(Resource)]
+pub struct ErosionComputeWorker;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ErosionComputeFields {
+    Results,
+}
+
+impl ComputeWorker for ErosionComputeWorker {
+    type Fields = ErosionComputeFields;
+    fn build(app: &mut App) -> AppComputeWorker<Self> {
+        AppComputeWorkerBuilder::new(app)
+            /* .add_rw_storage(
+                "Droplets",
+                &vec![Droplet::default(); DISPATCH_SIZE as usize * WORKGROUP_SIZE as usize],
+            ) */
+            .add_empty_staging(Self::Fields::Results, 64 * size_of::<f32>() as u64)
+            .add_pass::<ErosionShader>([1, 1, 1], &[Self::Fields::Results])
+            .build()
+    }
+}
+
+pub fn test_compute(compute_erosion: ResMut<AppComputeWorker<ErosionComputeWorker>>) {
+    if !compute_erosion.ready() {
+        return;
+    }
+
+    let result: Vec<f32> =
+        compute_erosion.read_vec(<ErosionComputeWorker as ComputeWorker>::Fields::Results);
+    println!("{:?}", result);
+}
+
+/* pub fn erode_heightmap(
     mut heightmap: ResMut<Heightmap>,
     settings: Res<WorldSettings>,
     mut heightmap_load_bar: ResMut<HeightmapLoadBar>,
@@ -330,10 +374,10 @@ pub fn erode_heightmap(
             }
         }
     }
-}
+} */
 
-const MAX_EROSION_STEPS: u32 = 500;
-struct WaterErosion<'a> {
+/* const MAX_EROSION_STEPS: u32 = 500; */
+/* struct WaterErosion<'a> {
     position: [u32; 2],
     sediment: f32,
     water: f32,
@@ -341,9 +385,9 @@ struct WaterErosion<'a> {
     direction: Vec2,
     heightmap: &'a mut Heightmap,
     radius: u32,
-}
+} */
 
-impl<'a> Debug for WaterErosion<'a> {
+/* impl<'a> Debug for WaterErosion<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WaterErosion")
             .field("position", &self.position)
@@ -505,4 +549,4 @@ impl<'a> WaterErosion<'a> {
         self.deposit(self.sediment * deposition_speed);
         return;
     }
-}
+} */

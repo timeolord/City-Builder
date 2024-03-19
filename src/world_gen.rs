@@ -12,6 +12,7 @@ use bevy::{
     },
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
+use bevy_app_compute::prelude::{AppComputeWorker, AppComputeWorkerPlugin};
 use egui_file::FileDialog;
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,7 @@ pub mod heightmap;
 pub mod mesh_gen;
 pub mod noise_gen;
 pub mod terrain_material;
+pub mod consts;
 
 use crate::{
     save::{save_path, SaveEvent},
@@ -29,10 +31,9 @@ use crate::{
 };
 
 use self::{
-    erosion::{erode_heightmap, gpu_erode_heightmap, ComputeErosion, ErosionEvent},
-    heightmap::{Heightmap, HeightmapImage},
-    mesh_gen::generate_world_mesh,
-    noise_gen::{noise_function, NoiseFunction, NoiseSettings},
+    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE}, erosion::{
+        gpu_erode_heightmap, test_compute, ComputeErosion, ErosionComputeWorker, ErosionEvent,
+    }, heightmap::{Heightmap, HeightmapImage}, mesh_gen::generate_world_mesh, noise_gen::{noise_function, NoiseFunction, NoiseSettings}
 };
 use bevy_egui::{
     egui::{self, TextureId},
@@ -54,12 +55,14 @@ impl Plugin for WorldGenPlugin {
         app.add_plugins(<ComputeShaderWorker<ComputeErosion>>::plugin(
             "terrain_erosion.wgsl",
         ));
+        app.add_plugins(AppComputeWorkerPlugin::<ErosionComputeWorker>::default());
         app.add_systems(OnEnter(GameState::WorldGeneration), init);
         app.add_systems(
             Update,
             (
                 generate_heightmap,
                 gpu_erode_heightmap,
+                test_compute,
                 /* erode_heightmap, */
                 display_ui,
             )
@@ -76,11 +79,6 @@ impl Plugin for WorldGenPlugin {
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
     }
 }
-
-type WorldSize = [u32; 2];
-
-pub const CHUNK_SIZE: u32 = 128;
-pub const HEIGHTMAP_CHUNK_SIZE: u32 = CHUNK_SIZE + 1;
 
 fn update_heightmap_image(
     mut heightmap: ResMut<Heightmap>,
@@ -125,17 +123,14 @@ fn update_heightmap_image(
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {
-    pub world_size: WorldSize,
     pub noise_settings: NoiseSettings,
     pub erosion_amount: u32,
 }
 
 impl Default for WorldSettings {
     fn default() -> Self {
-        let world_size = [16, 16];
         Self {
-            world_size,
-            noise_settings: NoiseSettings::new(world_size),
+            noise_settings: NoiseSettings::default(),
             erosion_amount: 50,
         }
     }
@@ -144,12 +139,6 @@ impl Default for WorldSettings {
 impl WorldSettings {
     fn seed(&self) -> u32 {
         self.noise_settings.seed
-    }
-    fn tile_world_size(&self) -> WorldSize {
-        let mut world_size = self.world_size;
-        world_size[0] *= CHUNK_SIZE;
-        world_size[1] *= CHUNK_SIZE;
-        world_size
     }
 }
 
@@ -166,7 +155,7 @@ impl HeightmapLoadBar {
 
 fn init(mut commands: Commands, mut image_assets: ResMut<Assets<Image>>) {
     commands.init_resource::<WorldSettings>();
-    let heightmap = Heightmap::new(WorldSettings::default().world_size);
+    let heightmap = Heightmap::new(CHUNK_WORLD_SIZE);
     commands.insert_resource(HeightmapImage {
         image: image_assets.add(heightmap.clone().as_bevy_image()),
         size: heightmap.size().into(),
@@ -188,8 +177,6 @@ fn generate_heightmap(
     mut erosion_event: EventWriter<ErosionEvent>,
     mut working: Local<bool>,
 ) {
-    let world_size = world_settings.world_size;
-
     if *working {
         if tasks.is_empty() {
             heightmap_load_bar.heightmap_progress = 0.0;
@@ -222,8 +209,8 @@ fn generate_heightmap(
         let noise_settings = world_settings.noise_settings;
 
         //Seperate each chunk into its own task to be processed in parallel, and over multiple frames
-        for chunk_y in 0..world_size[0] {
-            for chunk_x in 0..world_size[1] {
+        for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
+            for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
                 let task = thread_pool.spawn(async move {
                     let perlin = noise_function(noise_settings);
                     let mut results =

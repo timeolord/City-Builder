@@ -27,25 +27,20 @@ itertools = "0.12.0"
 noise = "0.8.2"
 num-traits = "0.2.17"
 rand = "0.8.5"
-rayon = "1.8.0"
 smooth-bevy-cameras = "0.11.0"
-strict-num = "0.1.1"
-strum = "0.25.0"
-strum_macros = "0.25.0"
-wave-function-collapse = "0.2.0"
-float_eq = "1.0.1"
-fnv = "1.0.7"
+strum = "0.26.2"
+strum_macros = "0.26.2"
 ordered-float = "4.2.0"
 bevy_egui = "0.25.0"
-futures-lite = "2.2.0"
 rand_distr = "0.4.3"
-memoize = "0.4.2"
 fast-math = "0.1.1"
 serde = "1.0.196"
 ron = "0.8.1"
 egui_file = "0.16.2"
 bevy_mod_debugdump = "0.10"
 num = "0.4.1"
+#bevy_app_compute = { path = "C:\\Users\\awei3\\Desktop\\compute_shader_fork\\bevy_app_compute" }
+bevy_app_compute = { git = "https://github.com/timeolord/bevy_app_compute.git" }
 
 [dependencies.bevy]
 version = "0.13"
@@ -134,7 +129,7 @@ features = [
 [dependencies.uuid]
 version = "1.7.0"
 features = [
-    "v4",                # Lets you generate random UUIDs
-    "fast-rng",          # Use a faster (but still sufficiently random) RNG
-    "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
+  "v4",                # Lets you generate random UUIDs
+  "fast-rng",          # Use a faster (but still sufficiently random) RNG
+  "macro-diagnostics", # Enable better diagnostics for compile-time UUIDs
 ]

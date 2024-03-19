@@ -193,43 +193,7 @@ impl AppPipelineCache {
     }
 }
 
-pub struct AppComputeShaderPlugin;
-impl Plugin for AppComputeShaderPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(AppPipelineCache {
-            pipeline_cache: vec![],
-        });
-        app.add_systems(
-            Render,
-            update_app_pipeline.in_set(RenderSet::ExtractCommands),
-        );
-    }
-}
-fn update_app_pipeline(pipeline_cache: Res<PipelineCache>, mut app_world: ResMut<MainWorld>) {
-    let mut app_pipeline_cache = app_world.get_resource_mut::<AppPipelineCache>().unwrap();
-    let mut cloned_pipelines = vec![];
-    for pipeline in pipeline_cache.pipelines() {
-        let cloned_state = match &pipeline.state {
-            CachedPipelineState::Ok(x) => CachedPipelineState::Ok(match x {
-                Pipeline::RenderPipeline(x) => Pipeline::RenderPipeline(x.clone()),
-                Pipeline::ComputePipeline(x) => Pipeline::ComputePipeline(x.clone()),
-            }),
-            //If a pipeline is not okay, no need to transfer it to the app world.
-            _ => continue,
-        };
-        let cloned_descriptor = match &pipeline.descriptor {
-            PipelineDescriptor::RenderPipelineDescriptor(x) => PipelineDescriptor::RenderPipelineDescriptor(x.clone()),
-            PipelineDescriptor::ComputePipelineDescriptor(x) => PipelineDescriptor::ComputePipelineDescriptor(x.clone()),
-        };
-        let cloned_pipeline = CachedPipeline {
-            state: cloned_state,
-            descriptor: cloned_descriptor,
-        };
-        cloned_pipelines.push(cloned_pipeline);
-    }
-    app_pipeline_cache.pipeline_cache = cloned_pipelines;
-}
-pub struct ComputeShaderWorkerNode<Worker: ComputeWorker> {
+/* pub struct ComputeShaderWorkerNode<Worker: ComputeWorker> {
     _phantom_data: PhantomData<Worker>,
     state: ComputeShaderWorkerNodeState,
     staging_buffer: Option<Buffer>,
@@ -365,7 +329,7 @@ impl<Worker: ComputeWorker> Node for ComputeShaderWorkerNode<Worker> {
             }
         }
     }
-}
+} */
 
 pub trait ComputeWorker: Sized + Sync + Send + 'static + Resource {
     type Input: AsBindGroup
@@ -419,10 +383,10 @@ pub trait ComputeWorker: Sized + Sync + Send + 'static + Resource {
         }
     }
 }
-#[derive(RenderLabel, Clone, Eq, PartialEq, Hash, Debug)]
+/* #[derive(RenderLabel, Clone, Eq, PartialEq, Hash, Debug)]
 struct ComputeShaderWorkerNodeLabel {
     id: u128,
-}
+} */
 pub struct ComputeWorkerPlugin<Worker> {
     shader_path: String,
     _phantom_data: PhantomData<Worker>,
@@ -439,9 +403,9 @@ impl<Worker> ComputeWorkerPlugin<Worker> {
 
 impl<Worker: ComputeWorker + Default> Plugin for ComputeWorkerPlugin<Worker> {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ExtractResourcePlugin::<Worker::Input>::default());
+        /* app.add_plugins(ExtractResourcePlugin::<Worker::Input>::default()); */
 
-        let render_app = app.sub_app_mut(RenderApp);
+        /* let render_app = app.sub_app_mut(RenderApp);
         render_app.add_systems(
             Render,
             Worker::prepare_bind_group
@@ -454,7 +418,7 @@ impl<Worker: ComputeWorker + Default> Plugin for ComputeWorkerPlugin<Worker> {
         let mut render_graph = render_app.world.resource_mut::<RenderGraph>();
 
         let id: u128 = Uuid::new_v4().as_u128();
-        render_graph.add_node(ComputeShaderWorkerNodeLabel { id }, node);
+        render_graph.add_node(ComputeShaderWorkerNodeLabel { id }, node); */
     }
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);

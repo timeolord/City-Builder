@@ -27,7 +27,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{mesh_gen::WORLD_HEIGHT_SCALE, CHUNK_SIZE, HEIGHTMAP_CHUNK_SIZE};
+use super::{consts::CHUNK_SIZE, mesh_gen::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {

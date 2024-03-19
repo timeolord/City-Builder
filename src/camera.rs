@@ -11,7 +11,9 @@ use smooth_bevy_cameras::{
 
 use crate::{
     world::WorldEntity,
-    world_gen::{heightmap::Heightmap, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings, CHUNK_SIZE},
+    world_gen::{
+        consts::{CHUNK_SIZE, TILE_WORLD_SIZE}, heightmap::Heightmap, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings,
+    },
     GameState, DEBUG,
 };
 
@@ -127,15 +129,10 @@ pub fn input(
         transform.eye.y = transform.target.y;
     }
 
-    let world_size = world_settings.world_size;
-
     //Keep camera above terrain height
-    /* let world_size = [
-        CHUNK_SIZE as f32 * 0.5,
-        ((world_size[1]) * CHUNK_SIZE) as f32 - (CHUNK_SIZE as f32 * 0.5),
-    ]; */
-    if (transform.eye.x > 0.0 && transform.eye.x < world_size[1] as f32 * CHUNK_SIZE as f32)
-        && (transform.eye.z > 0.0 && transform.eye.z < world_size[1] as f32 * CHUNK_SIZE as f32)
+
+    if (transform.eye.x > 0.0 && transform.eye.x < TILE_WORLD_SIZE[0] as f32)
+        && (transform.eye.z > 0.0 && transform.eye.z < TILE_WORLD_SIZE[1] as f32)
     {
         let terrain_height = heightmap.interpolate_height(transform.eye.xz()) + 1.5;
         if transform.eye.y < terrain_height {
@@ -143,16 +140,15 @@ pub fn input(
         }
     }
 
-    let world_size = world_settings.world_size;
     //Restrict Camera to world bounds
     let eye_delta = transform.eye - transform.target;
     transform.target.x = transform.target.x.clamp(
         CHUNK_SIZE as f32 * 0.5,
-        ((world_size[0]) * CHUNK_SIZE) as f32 - (CHUNK_SIZE as f32 * 0.5),
+        TILE_WORLD_SIZE[0] as f32 - (CHUNK_SIZE as f32 * 0.5),
     );
     transform.target.z = transform.target.z.clamp(
         CHUNK_SIZE as f32 * 0.5,
-        ((world_size[1]) * CHUNK_SIZE) as f32 - (CHUNK_SIZE as f32 * 0.5),
+        TILE_WORLD_SIZE[1] as f32 - (CHUNK_SIZE as f32 * 0.5),
     );
     transform.eye = transform.target + eye_delta;
 

@@ -9,7 +9,7 @@ use crate::{
     assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainType},
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
-    world_gen::heightmap::Heightmap,
+    world_gen::{consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE}, heightmap::Heightmap},
     GameState,
 };
 
@@ -18,7 +18,7 @@ pub struct WorldMesh;
 #[derive(Component)]
 pub struct TreeMesh;
 
-use super::{WorldSettings, CHUNK_SIZE};
+use super::{WorldSettings};
 
 pub const TILE_SIZE: f32 = 1.0;
 pub const WORLD_HEIGHT_SCALE: f32 = 200.0;
@@ -37,13 +37,12 @@ pub fn generate_world_mesh(
     if world_mesh_query.is_empty() || heightmap.is_changed() {
         let start_time = std::time::Instant::now();
         let mut random_number_generator = StdRng::seed_from_u64(world_settings.seed() as u64);
-        let world_size = world_settings.world_size;
         for entity in world_mesh_query.iter() {
             commands.entity(entity).despawn();
         }
 
-        for chunk_y in 0..world_size[0] {
-            for chunk_x in 0..world_size[1] {
+        for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
+            for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
                 let mut grid_mesh = Mesh::new(
                     PrimitiveTopology::TriangleList,
                     RenderAssetUsages::RENDER_WORLD,

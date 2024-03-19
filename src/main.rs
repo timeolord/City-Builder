@@ -25,6 +25,7 @@ use crate::assets::asset_loader;
 use bevy::{
     core::TaskPoolThreadAssignmentPolicy, diagnostic::FrameTimeDiagnosticsPlugin, prelude::*,
 };
+use bevy_app_compute::prelude::AppComputePlugin;
 use bevy_egui::EguiPlugin;
 use std::env;
 
@@ -47,6 +48,7 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
+        AppComputePlugin,
     );
     if cfg!(debug_assertions) {
         env::set_var("RUST_BACKTRACE", "1");
