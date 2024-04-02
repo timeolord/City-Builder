@@ -6,9 +6,7 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::module_name_repetitions)]
-/* #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] */
 
-//! A simple 3D scene with light shining over a cube sitting on a plane.
 mod assets;
 mod camera;
 mod debug;

@@ -1,27 +1,19 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::{Arc, RwLock},
-};
+use std::path::{Path, PathBuf};
 
 use bevy::{
     prelude::*,
-    render::{
-        extract_resource::ExtractResourcePlugin,
-        render_resource::{BufferDescriptor, BufferUsages},
-        renderer::RenderDevice,
-    },
     tasks::{block_on, AsyncComputeTaskPool, Task},
 };
 use bevy_app_compute::prelude::{AppComputeWorker, AppComputeWorkerPlugin};
 use egui_file::FileDialog;
 use serde::{Deserialize, Serialize};
 
+pub mod consts;
 pub mod erosion;
 pub mod heightmap;
 pub mod mesh_gen;
 pub mod noise_gen;
 pub mod terrain_material;
-pub mod consts;
 
 use crate::{
     save::{save_path, SaveEvent},
@@ -30,9 +22,11 @@ use crate::{
 };
 
 use self::{
-    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE}, erosion::{
-        /* gpu_erode_heightmap, */ test_compute, /* ComputeErosion, */ ErosionComputeWorker, ErosionEvent,
-    }, heightmap::{Heightmap, HeightmapImage}, mesh_gen::generate_world_mesh, noise_gen::{noise_function, NoiseFunction, NoiseSettings}
+    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE},
+    erosion::{gpu_erode_heightmap, ErosionComputeFields, ErosionComputeWorker, ErosionEvent},
+    heightmap::{Heightmap, HeightmapImage},
+    mesh_gen::generate_world_mesh,
+    noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{
     egui::{self, TextureId},
@@ -57,10 +51,8 @@ impl Plugin for WorldGenPlugin {
             Update,
             (
                 generate_heightmap,
-                /* gpu_erode_heightmap, */
-                test_compute,
-                /* erode_heightmap, */
                 display_ui,
+                (gpu_erode_heightmap, update_heightmap_image).chain(),
             )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
@@ -76,36 +68,21 @@ impl Plugin for WorldGenPlugin {
     }
 }
 
-/* fn update_heightmap_image(
+fn update_heightmap_image(
     mut heightmap: ResMut<Heightmap>,
     heightmap_image: ResMut<HeightmapImage>,
     progress_bar: Res<HeightmapLoadBar>,
-    compute_erosion: Option<ResMut<ComputeErosion>>,
+    erosion_worker: ResMut<AppComputeWorker<ErosionComputeWorker>>,
     mut image_assets: ResMut<Assets<Image>>,
     mut counter: Local<u8>,
 ) {
     *counter = counter.saturating_add(1);
-    if *counter > 5 || progress_bar.heightmap_progress < 1.0 {
+    if *counter > 10 || progress_bar.heightmap_progress < 1.0 {
         //Updates the heightmap image every five frames from the erosion gpu buffer if its avaliable
-        if let Some(compute_erosion) = compute_erosion.as_ref() {
-            match *compute_erosion.run_condition.as_ref().read().unwrap() {
-                ComputeShaderRunType::Never | ComputeShaderRunType::CleanUp => {
-                    return;
-                }
-                ComputeShaderRunType::EveryFrame | ComputeShaderRunType::Once => {
-                    for (index, byte) in compute_erosion
-                        .as_ref()
-                        .result_bytes
-                        .read()
-                        .unwrap()
-                        .chunks_exact(4)
-                        .enumerate()
-                    {
-                        heightmap.data[index] =
-                            f32::from_ne_bytes([byte[0], byte[1], byte[2], byte[3]]);
-                    }
-                }
-            }
+        if erosion_worker.ready() {
+            let results: Vec<f32> = erosion_worker.read_vec(ErosionComputeFields::Results);
+            /* println!("{:?}", &results[0..10]); */
+            heightmap.data = results;
         }
 
         let old_image = image_assets
@@ -115,7 +92,7 @@ impl Plugin for WorldGenPlugin {
         *old_image = new_image;
         *counter = 0;
     }
-} */
+}
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {

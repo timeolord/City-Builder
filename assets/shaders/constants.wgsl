@@ -1,5 +1,6 @@
-#define_import_path shader_constants
-pub const EROSION_WORKGROUP_SIZE = 64;
-pub const EROSION_DISPATCH_SIZE = 16;
-pub const MAX_EROSION_STEPS = 500;
-pub const PI = 3.141592653589793;
+#define_import_path constants
+const EROSION_WORKGROUP_SIZE = 64;
+const EROSION_DISPATCH_SIZE = 16;
+const MAX_EROSION_STEPS = 500;
+const PI = 3.141592653589793;
+const HEIGHTMAP_IMAGE_SIZE = vec2<u32>(2064,2064);

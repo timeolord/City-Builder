@@ -1,7 +1,4 @@
-use std::{
-    ops::{Index, IndexMut},
-    sync::{Arc, RwLock},
-};
+use std::ops::{Index, IndexMut};
 
 use crate::{
     utils::{
@@ -10,13 +7,12 @@ use crate::{
     },
     world::WorldSize,
 };
-use array2d::Array2D;
+
 use bevy::{
     prelude::*,
     render::{
-        extract_resource::ExtractResource,
-        render_asset::RenderAssetUsages,
-        render_resource::{AsBindGroup, Buffer, TextureUsages},
+        extract_resource::ExtractResource, render_asset::RenderAssetUsages,
+        render_resource::TextureUsages,
     },
 };
 use image::{DynamicImage, RgbaImage};
@@ -26,12 +22,12 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{consts::CHUNK_SIZE, mesh_gen::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
+use super::{mesh_gen::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
     pub data: Vec<f32>,
-    pub tree_density: Array2D<f64>,
+    //pub tree_density: Array2D<f64>,
     size: WorldSize,
 }
 
@@ -56,25 +52,33 @@ impl Heightmap {
             ),
         } */
         Self {
-            data: vec![0.0; (size[0] * HEIGHTMAP_CHUNK_SIZE * size[1] * HEIGHTMAP_CHUNK_SIZE) as usize],
-            tree_density: Array2D::filled_with(
-                0.5,
-                (size[0] * CHUNK_SIZE as u32) as usize,
-                (size[1] * CHUNK_SIZE as u32) as usize,
-            ),
-            size: [size[0] * HEIGHTMAP_CHUNK_SIZE, size[1] * HEIGHTMAP_CHUNK_SIZE],
+            data: vec![
+                0.0;
+                (size[0] * HEIGHTMAP_CHUNK_SIZE * size[1] * HEIGHTMAP_CHUNK_SIZE) as usize
+            ],
+            //tree_density: Array2D::filled_with(
+            //    0.5,
+            //    (size[0] * CHUNK_SIZE as u32) as usize,
+            //    (size[1] * CHUNK_SIZE as u32) as usize,
+            //),
+            size: [
+                size[0] * HEIGHTMAP_CHUNK_SIZE,
+                size[1] * HEIGHTMAP_CHUNK_SIZE,
+            ],
         }
     }
     pub fn get<N: Integer + AsPrimitive<usize>, T: Into<[N; 2]>>(&self, point: T) -> Option<f32> {
         let point = point.into();
-        self.data.get(point[0].as_() * self.size[1] as usize + point[1].as_()).copied()
+        self.data
+            .get(point[0].as_() * self.size[1] as usize + point[1].as_())
+            .copied()
     }
     pub fn size(&self) -> WorldSize {
         [self.size[0], self.size[1]]
     }
-    pub fn tree_density(&self, point: [u32; 2]) -> f64 {
+    /* pub fn tree_density(&self, point: [u32; 2]) -> f64 {
         self.tree_density[(point[0] as usize, point[1] as usize)]
-    }
+    } */
     pub fn neighbours(&self, point: [u32; 2]) -> impl Iterator<Item = [u32; 2]> + '_ {
         CardinalDirection::iter().filter_map(move |dir| {
             let neighbour = point.as_i32() + dir;
@@ -107,6 +111,7 @@ impl Heightmap {
             false,
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         );
+        // TODO: Do I need to do this?
         image.texture_descriptor.usage = TextureUsages::COPY_DST
             | TextureUsages::STORAGE_BINDING
             | TextureUsages::TEXTURE_BINDING;

@@ -3,10 +3,7 @@ use std::{
     ops::{Add, Div},
 };
 
-use bevy::math::{
-    cubic_splines::{CubicBezier, CubicCurve, CubicGenerator},
-    Vec2, Vec3,
-};
+use bevy::math::{cubic_splines::CubicCurve, Vec2, Vec3};
 use itertools::Itertools;
 use num_traits::Float;
 
@@ -20,7 +17,7 @@ pub fn unnormalized_normal_array(a: [f32; 3], b: [f32; 3], c: [f32; 3]) -> Vec3 
     }
 }
 
-pub fn unnormalized_normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+/* pub fn unnormalized_normal_vector(a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
     let normal = (b - a).cross(c - a);
     if normal.length().is_sign_negative() {
         -normal
@@ -37,14 +34,14 @@ pub fn round_even_up(n: u32) -> u32 {
         even if even % 2 == 0 => even + 1,
         odd => odd,
     }
-}
+} */
 
-#[inline(always)]
+/* #[inline(always)]
 pub fn fast_normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
     let a = 1.0 / (std_dev * (2.0 * std::f64::consts::PI).sqrt());
     let b = -0.5 * ((x - mean) / std_dev).powi(2);
     a * fast_math::exp_raw(b as f32) as f64
-}
+} */
 
 #[inline(always)]
 pub fn normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
@@ -53,11 +50,11 @@ pub fn normal_curve(mean: f64, std_dev: f64, x: f64) -> f64 {
     a * b.exp()
 }
 
-#[inline(always)]
+/* #[inline(always)]
 pub fn fast_normal_approx(a: f64, x: f64) -> f64 {
     //This function provides a similar drop looking shape to the normal curve, but is much faster to calculate
     a / (((0.1 * a + 1.0) * a) + x * x)
-}
+} */
 
 pub trait RoundBy {
     fn round_by(self, n: Self) -> Self;
@@ -92,7 +89,7 @@ impl RoundEvenUp for u64 {
     }
 }
 
-pub fn straight_bezier_curve(starting_position: Vec2, ending_position: Vec2) -> CubicCurve<Vec2> {
+/* pub fn straight_bezier_curve(starting_position: Vec2, ending_position: Vec2) -> CubicCurve<Vec2> {
     CubicBezier::new([[
         starting_position,
         starting_position.lerp(ending_position, 1.0 / 3.0),
@@ -100,7 +97,7 @@ pub fn straight_bezier_curve(starting_position: Vec2, ending_position: Vec2) -> 
         ending_position,
     ]])
     .to_curve()
-}
+} */
 pub trait Arclength {
     fn arclength(&self) -> f32;
 }
@@ -191,7 +188,7 @@ pub fn bilinear_interpolation<T: Float>(a: [T; 2], b: [T; 2], c: [T; 2]) -> T {
     lerp(lerp(a[0], a[1], c[0]), lerp(b[0], b[1], c[0]), c[1])
 }
 
-#[derive(Debug, Clone, Copy)]
+/* #[derive(Debug, Clone, Copy)]
 pub struct VectorLine {
     start: Vec2,
     end: Vec2,
@@ -225,4 +222,4 @@ impl VectorLine {
     pub fn to_curve(&self) -> CubicCurve<Vec2> {
         straight_bezier_curve(self.start, self.end)
     }
-}
+} */

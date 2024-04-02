@@ -1,15 +1,10 @@
-#import shader_prelude
+#import constants
 
-const $MAX_EROSION_STEPS$ = 500;
-const DROPLET_ARRAY_SIZE = $WORKGROUP_SIZE$ * $DISPATCH_SIZE$;
+const DROPLET_ARRAY_SIZE = constants::EROSION_WORKGROUP_SIZE * constants::EROSION_DISPATCH_SIZE;
 @group(0) @binding(0)
 var<storage, read_write> droplets: array<Droplet, DROPLET_ARRAY_SIZE>;
 @group(0) @binding(1)
 var<storage, read_write> results: array<f32>;
-@group(0) @binding(2)
-var<uniform> image_size: vec2<u32>;
-@group(0) @binding(3)
-var<uniform> world_size: vec2<u32>;
 
 struct Droplet {
     position_x: u32,
@@ -30,14 +25,14 @@ const minimum_slope: f32 = 0.01;
 const direction_inertia: f32 = 3.0;
 const carry_capacity_modifier: f32 = 1.0;
 
-@compute @workgroup_size($WORKGROUP_SIZE$, 1, 1)
+@compute @workgroup_size(constants::EROSION_WORKGROUP_SIZE, 1, 1)
 fn main(@builtin(global_invocation_id) invocation_id: vec3<u32>, @builtin(num_workgroups) num_workgroups: vec3<u32>) {
     let droplet_index = invocation_id.x;
     erosion(droplet_index);
 }
 
 fn erosion(droplet_position: u32) {
-    for (var i: i32 = 0; i < MAX_EROSION_STEPS; i++) {
+    for (var i: i32 = 0; i < constants::MAX_EROSION_STEPS; i++) {
         let position = vec2<u32>(droplets[droplet_position].position_x, droplets[droplet_position].position_y);
         let radius = i32(droplets[droplet_position].radius);
         //get the neighbours with the current radius
@@ -49,7 +44,7 @@ fn erosion(droplet_position: u32) {
                             continue;
                         }
                         var direction = vec2<f32>(position) - vec2<f32>(neighbour);
-                        let height_difference = results[position.x + position.y * image_size.x] - results[neighbour.x + neighbour.y * i32(image_size.x)];
+                        let height_difference = results[position.x + position.y * constants::HEIGHTMAP_IMAGE_SIZE.x] - results[neighbour.x + neighbour.y * i32(constants::HEIGHTMAP_IMAGE_SIZE.x)];
                         direction *= (-height_difference) * gravity * direction_inertia;
                         droplets[droplet_position].direction_x += direction.x;
                         droplets[droplet_position].direction_y += direction.y;
@@ -68,7 +63,7 @@ fn erosion(droplet_position: u32) {
 
         droplets[droplet_position].water *= 1.0 - water_evaporation_speed;
 
-        let height_difference = results[position.x + position.y * image_size.x] - results[next_position.x + next_position.y * image_size.x];
+        let height_difference = results[position.x + position.y * constants::HEIGHTMAP_IMAGE_SIZE.x] - results[next_position.x + next_position.y * constants::HEIGHTMAP_IMAGE_SIZE.x];
         droplets[droplet_position].speed += height_difference * gravity;
         droplets[droplet_position].direction_x *= droplets[droplet_position].speed;
         droplets[droplet_position].direction_y *= droplets[droplet_position].speed;
@@ -113,7 +108,7 @@ fn deposit(droplet_position: u32, amount: f32) {
                 if bound_check_i32(neighbour) && distance(vec2<f32>(position), vec2<f32>(neighbour)) < f32(radius){
                     let distance = distance(vec2<f32>(position), vec2<f32>(neighbour));
                     let deposit_amount = amount * normal_curve(0.0, f32(radius) * 0.5, f32(distance));
-                    results[neighbour.x + neighbour.y * i32(image_size.x)] = clamp(results[neighbour.x + neighbour.y * i32(image_size.x)] +  deposit_amount, 0.0, 1.0);
+                    results[neighbour.x + neighbour.y * i32(constants::HEIGHTMAP_IMAGE_SIZE.x)] = clamp(results[neighbour.x + neighbour.y * i32(constants::HEIGHTMAP_IMAGE_SIZE.x)] +  deposit_amount, 0.0, 1.0);
                 }
             }
         }
@@ -124,20 +119,42 @@ fn erode(droplet_position: u32, amount: f32) {
     deposit(droplet_position, -amount);
 }
 
+fn blur_image(chunk_id: u32, total_chunks: u32, blur_amount: i32) {
+    for (var b: i32 = 0; b <= blur_amount; b++) {
+        for (var x: i32 = 0; x < i32(constants::HEIGHTMAP_IMAGE_SIZE.x); x++) {
+            for (var y: i32 = 0; y < i32(constants::HEIGHTMAP_IMAGE_SIZE.y); y++) {
+                let radius = i32(1);
+                var sum = 0.0;
+                var length = 0;
+                for (var dx: i32 = -radius; dx <= radius; dx++) {
+                    for (var dy: i32 = -radius; dy <= radius; dy++) {
+                    let neighbour = vec2<i32>(x + dx, y + dy);
+                    if bound_check_i32(neighbour) {
+                            sum += results[neighbour.x + neighbour.y * i32(constants::HEIGHTMAP_IMAGE_SIZE.x)];
+                            length += 1;
+                        }
+                    }
+                }
+                results[x + y * i32(constants::HEIGHTMAP_IMAGE_SIZE.x)] = sum / f32(length);
+            }
+        }
+    }
+}
+
 fn fast_normal_approx(a: f32, x: f32) -> f32 {
     return a / (((0.1 * a + 1.0) * a) + x * x);
 }
 
 fn normal_curve(mean: f32, std_dev: f32, x: f32) -> f32 {
-    let a = 1.0 / sqrt(std_dev * (2.0 * PI));
+    let a = 1.0 / sqrt(std_dev * (2.0 * constants::PI));
     let b = (-0.5) * pow((x - mean) / std_dev, 2.0);
     return a * exp(b);
 }
 
 fn bound_check_u32(position: vec2<u32>) -> bool {
-    if position.x < image_size.x
+    if position.x < constants::HEIGHTMAP_IMAGE_SIZE.x
         && position.x > 0
-        && position.y < image_size.y
+        && position.y < constants::HEIGHTMAP_IMAGE_SIZE.y
         && position.y > 0
         {
             return true;
@@ -147,9 +164,9 @@ fn bound_check_u32(position: vec2<u32>) -> bool {
 }
 
 fn bound_check_i32(position: vec2<i32>) -> bool {
-    if position.x < i32(image_size.x)
+    if position.x < i32(constants::HEIGHTMAP_IMAGE_SIZE.x)
         && position.x > 0
-        && position.y < i32(image_size.y)
+        && position.y < i32(constants::HEIGHTMAP_IMAGE_SIZE.y)
         && position.y > 0
         {
             return true;

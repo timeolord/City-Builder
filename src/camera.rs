@@ -46,7 +46,7 @@ pub fn input(
     keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
-    world_settings: Res<WorldSettings>,
+    _world_settings: Res<WorldSettings>,
     mut gizmos: Gizmos,
     heightmap: Res<Heightmap>,
 ) {
