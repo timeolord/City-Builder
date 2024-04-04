@@ -1,10 +1,9 @@
-
 use std::{env::current_dir, fs::File, io::prelude::Write};
 
-use crate::world_gen::{
-    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE},
-    erosion::{EROSION_DISPATCH_SIZE, EROSION_WORKGROUP_SIZE, MAX_EROSION_STEPS},
-};
+use crate::{utils::blur::BLUR_WORKGROUP_SIZE, world_gen::consts::{
+    CHUNK_WORLD_SIZE, EROSION_DISPATCH_SIZE, EROSION_WORKGROUP_SIZE, HEIGHTMAP_CHUNK_SIZE,
+    MAX_EROSION_STEPS,
+}};
 
 macro_rules! constant_to_wgsl {
     ($constant:ident) => {
@@ -32,6 +31,7 @@ pub fn create_shader_constants() {
         CHUNK_WORLD_SIZE[0] * HEIGHTMAP_CHUNK_SIZE,
         CHUNK_WORLD_SIZE[1] * HEIGHTMAP_CHUNK_SIZE
     ));
+    text.push_str(constant_to_wgsl!(BLUR_WORKGROUP_SIZE));
 
     //Write the text to the file
     file.write_all(text.as_bytes()).unwrap();

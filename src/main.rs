@@ -48,6 +48,7 @@ fn main() {
         world::WorldPlugin,
         world_gen::WorldGenPlugin,
         asset_loader::AssetLoaderPlugin,
+        utils::UtilPlugin,
         AppComputePlugin,
     );
     if cfg!(debug_assertions) {

@@ -1,10 +1,13 @@
 use bevy::{
     prelude::*,
-    render::render_resource::{ShaderRef, ShaderType},
+    render::{
+        render_resource::{ShaderRef, ShaderType},
+        renderer::RenderDevice,
+    },
 };
 
 use bevy_app_compute::prelude::{
-    AppComputeWorker, AppComputeWorkerBuilder, ComputeShader, ComputeWorker,
+    AppComputeWorker, AppComputeWorkerBuilder, AppPipelineCache, ComputeShader, ComputeWorker,
 };
 use bytemuck::NoUninit;
 
@@ -14,18 +17,18 @@ use rand::{rngs::StdRng, SeedableRng};
 use rand_distr::{Distribution, Uniform};
 use std::fmt::Debug;
 
+use crate::utils::blur::{BlurComputeWorker, BlurShader, BlurWorkerFields, BLUR_WORKGROUP_SIZE};
+
 use super::{
-    consts::CHUNK_WORLD_SIZE, heightmap::Heightmap, HeightmapLoadBar, WorldSettings,
-    HEIGHTMAP_CHUNK_SIZE,
+    consts::{
+        CHUNK_WORLD_SIZE, EROSION_DISPATCH_SIZE, EROSION_WORKGROUP_SIZE, MAX_DROPLET_SIZE,
+        MIN_DROPLET_SIZE,
+    },
+    heightmap::Heightmap,
+    HeightmapLoadBar, WorldSettings, HEIGHTMAP_CHUNK_SIZE,
 };
 
 use std::time::Instant;
-
-pub const MAX_DROPLET_SIZE: u32 = 12;
-pub const MIN_DROPLET_SIZE: u32 = 2;
-pub const EROSION_WORKGROUP_SIZE: u64 = 64;
-pub const EROSION_DISPATCH_SIZE: u64 = 16;
-pub const MAX_EROSION_STEPS: u64 = 500;
 
 #[derive(Event)]
 pub struct ErosionEvent;
@@ -105,6 +108,9 @@ pub fn gpu_erode_heightmap(
     mut working: Local<bool>,
     mut benchmark: Local<Option<Instant>>,
     mut rng: Local<Option<StdRng>>,
+    mut blur_worker: ResMut<AppComputeWorker<BlurComputeWorker>>,
+    pipeline_cache: Res<AppPipelineCache>,
+    render_device: Res<RenderDevice>,
 ) {
     let erosion_chunks = settings.erosion_amount;
     let erosion_chunk_size = EROSION_DISPATCH_SIZE * EROSION_WORKGROUP_SIZE;
@@ -146,8 +152,30 @@ pub fn gpu_erode_heightmap(
     if *working {
         if *erosion_counter == 0 && erosion_worker.ready() {
             //This will read from the work done the previous frame
-            let heightmap_floats = erosion_worker.read_vec(ErosionComputeFields::Results);
-            heightmap.data = heightmap_floats;
+            let heightmap_floats: Vec<f32> = erosion_worker.read_vec(ErosionComputeFields::Results);
+            //Blur the heightmap to smooth out the erosion
+            blur_worker.add_staging(&render_device, BlurWorkerFields::Image, &heightmap_floats);
+            blur_worker.add_storage(
+                &render_device,
+                BlurWorkerFields::ImageSize,
+                &heightmap.size(),
+            );
+            blur_worker.add_storage(&render_device, BlurWorkerFields::BlurSize, &[3u32, 3u32]);
+            blur_worker.set_dispatch_size::<BlurShader>([
+                (heightmap.size()[0] as f32 / BLUR_WORKGROUP_SIZE as f32).ceil() as u32,
+                (heightmap.size()[1] as f32 / BLUR_WORKGROUP_SIZE as f32).ceil() as u32,
+                1,
+            ]);
+
+            for _ in 0..2 {
+                if !blur_worker.execute_now(&pipeline_cache) {
+                    println!("Failed to execute blur worker");
+                    return;
+                }
+            }
+
+            let blur_result: Vec<f32> = blur_worker.read_vec(BlurWorkerFields::Image);
+            heightmap.data = blur_result;
 
             heightmap_load_bar.erosion_progress = 1.0;
             *working = false;

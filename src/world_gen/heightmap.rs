@@ -22,7 +22,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{mesh_gen::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
+use super::{consts::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
@@ -106,15 +106,11 @@ impl Heightmap {
         DynamicImage::ImageRgba8(self.clone().into())
     }
     pub fn as_bevy_image(self) -> Image {
-        let mut image = Image::from_dynamic(
+        let image = Image::from_dynamic(
             self.as_dynamic_image(),
             false,
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         );
-        // TODO: Do I need to do this?
-        image.texture_descriptor.usage = TextureUsages::COPY_DST
-            | TextureUsages::STORAGE_BINDING
-            | TextureUsages::TEXTURE_BINDING;
         image
     }
     pub fn interpolate_height(&self, position: Vec2) -> f32 {

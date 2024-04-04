@@ -9,7 +9,10 @@ use crate::{
     assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainType},
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
-    world_gen::{consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE}, heightmap::Heightmap},
+    world_gen::{
+        consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE},
+        heightmap::Heightmap,
+    },
     GameState,
 };
 
@@ -18,10 +21,9 @@ pub struct WorldMesh;
 #[derive(Component)]
 pub struct TreeMesh;
 
-use super::{WorldSettings};
+use super::{consts::{TILE_SIZE, WORLD_HEIGHT_SCALE}, WorldSettings};
 
-pub const TILE_SIZE: f32 = 1.0;
-pub const WORLD_HEIGHT_SCALE: f32 = 200.0;
+
 
 #[derive(Resource, Default, Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ExtractedGameState(pub GameState);

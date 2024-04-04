@@ -52,14 +52,10 @@ impl Plugin for WorldGenPlugin {
             (
                 generate_heightmap,
                 display_ui,
-                (gpu_erode_heightmap, update_heightmap_image).chain(),
+                (update_heightmap_image, gpu_erode_heightmap).chain(),
             )
                 .run_if(in_state(GameState::WorldGeneration)),
         );
-        /* app.add_systems(
-            PostUpdate,
-            update_heightmap_image.run_if(in_state(GameState::WorldGeneration)),
-        ); */
         app.add_systems(
             Update,
             (generate_world_mesh).run_if(in_state(GameState::World)),
@@ -77,13 +73,10 @@ fn update_heightmap_image(
     mut counter: Local<u8>,
 ) {
     *counter = counter.saturating_add(1);
-    if *counter > 10 || progress_bar.heightmap_progress < 1.0 {
+    if (*counter > 10 || progress_bar.heightmap_progress < 1.0) && erosion_worker.ready() {
         //Updates the heightmap image every five frames from the erosion gpu buffer if its avaliable
-        if erosion_worker.ready() {
-            let results: Vec<f32> = erosion_worker.read_vec(ErosionComputeFields::Results);
-            /* println!("{:?}", &results[0..10]); */
-            heightmap.data = results;
-        }
+        let results: Vec<f32> = erosion_worker.read_vec(ErosionComputeFields::Results);
+        heightmap.data = results;
 
         let old_image = image_assets
             .get_mut(heightmap_image.image.clone_weak())

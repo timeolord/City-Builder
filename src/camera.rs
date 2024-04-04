@@ -12,7 +12,7 @@ use smooth_bevy_cameras::{
 use crate::{
     world::WorldEntity,
     world_gen::{
-        consts::{CHUNK_SIZE, TILE_WORLD_SIZE}, heightmap::Heightmap, mesh_gen::WORLD_HEIGHT_SCALE, WorldSettings,
+        consts::{CHUNK_SIZE, TILE_WORLD_SIZE, WORLD_HEIGHT_SCALE}, heightmap::Heightmap, WorldSettings,
     },
     GameState, DEBUG,
 };

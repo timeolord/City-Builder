@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use crate::{world_gen::mesh_gen::WORLD_HEIGHT_SCALE, GameState};
+use crate::{world_gen::consts::WORLD_HEIGHT_SCALE, GameState};
 use bevy::prelude::*;
 pub struct WorldPlugin;
 
