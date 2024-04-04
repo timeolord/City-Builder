@@ -10,10 +10,7 @@ use crate::{
 
 use bevy::{
     prelude::*,
-    render::{
-        extract_resource::ExtractResource, render_asset::RenderAssetUsages,
-        render_resource::TextureUsages,
-    },
+    render::{extract_resource::ExtractResource, render_asset::RenderAssetUsages},
 };
 use image::{DynamicImage, RgbaImage};
 use itertools::Itertools;
