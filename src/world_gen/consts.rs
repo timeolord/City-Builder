@@ -10,6 +10,8 @@ pub const TILE_WORLD_SIZE: WorldSize = [
 pub const TILE_SIZE: f32 = 1.0;
 pub const WORLD_HEIGHT_SCALE: f32 = 300.0;
 
+pub const SNOW_HEIGHT: f32 = WORLD_HEIGHT_SCALE * 0.5;
+
 pub const MAX_DROPLET_SIZE: u32 = 12;
 pub const MIN_DROPLET_SIZE: u32 = 2;
 pub const EROSION_WORKGROUP_SIZE: u64 = 64;

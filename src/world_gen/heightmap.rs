@@ -19,7 +19,10 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use super::{consts::WORLD_HEIGHT_SCALE, HEIGHTMAP_CHUNK_SIZE};
+use super::{
+    consts::{SNOW_HEIGHT, WORLD_HEIGHT_SCALE},
+    WorldSettings, HEIGHTMAP_CHUNK_SIZE,
+};
 
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct Heightmap {
@@ -99,12 +102,43 @@ impl Heightmap {
             dy: -(radius as i32),
         }
     }
-    pub fn as_dynamic_image(self) -> DynamicImage {
-        DynamicImage::ImageRgba8(self.clone().into())
+    pub fn as_rgba_image(&self, world_settings: &WorldSettings) -> RgbaImage {
+        let [width, height] = self.size();
+        RgbaImage::from_raw(
+            width,
+            height,
+            self.data
+                .iter()
+                .map(|&height| {
+                    if (height * WORLD_HEIGHT_SCALE) < world_settings.water_level as f32 {
+                        [0, 124, 155, 255]
+                    } else if (height * WORLD_HEIGHT_SCALE) > SNOW_HEIGHT {
+                        [
+                            (height * 255.0) as u8,
+                            (height * 255.0) as u8,
+                            (height * 255.0) as u8,
+                            255,
+                        ]
+                    } else {
+                        [
+                            (height * 19.0) as u8,
+                            (height * 109.0) as u8,
+                            (height * 21.0) as u8,
+                            255,
+                        ]
+                    }
+                })
+                .flatten()
+                .collect_vec(),
+        )
+        .expect("Failed to convert heightmap to image")
     }
-    pub fn as_bevy_image(self) -> Image {
+    pub fn as_dynamic_image(self, world_settings: &WorldSettings) -> DynamicImage {
+        DynamicImage::ImageRgba8(self.as_rgba_image(world_settings))
+    }
+    pub fn as_bevy_image(self, world_settings: &WorldSettings) -> Image {
         let image = Image::from_dynamic(
-            self.as_dynamic_image(),
+            self.as_dynamic_image(world_settings),
             false,
             RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
         );
@@ -160,23 +194,6 @@ impl Iterator for HeightmapCircle {
                 return Some(neighbour.as_u32());
             }
         }
-    }
-}
-
-impl From<Heightmap> for RgbaImage {
-    fn from(heightmap: Heightmap) -> Self {
-        let [width, height] = heightmap.size();
-        RgbaImage::from_raw(
-            width,
-            height,
-            heightmap
-                .data
-                .iter()
-                .map(|&x| [(x * 255.0) as u8, (x * 255.0) as u8, (x * 255.0) as u8, 255])
-                .flatten()
-                .collect_vec(),
-        )
-        .expect("Failed to convert heightmap to image")
     }
 }
 impl Index<UVec2> for Heightmap {

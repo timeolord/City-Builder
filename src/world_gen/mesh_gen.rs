@@ -10,7 +10,7 @@ use crate::{
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
     world_gen::{
-        consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE},
+        consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE, TILE_WORLD_SIZE},
         heightmap::Heightmap,
     },
     GameState,
@@ -21,9 +21,10 @@ pub struct WorldMesh;
 #[derive(Component)]
 pub struct TreeMesh;
 
-use super::{consts::{TILE_SIZE, WORLD_HEIGHT_SCALE}, WorldSettings};
-
-
+use super::{
+    consts::{SNOW_HEIGHT, TILE_SIZE, WORLD_HEIGHT_SCALE},
+    WorldSettings,
+};
 
 #[derive(Resource, Default, Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ExtractedGameState(pub GameState);
@@ -34,9 +35,26 @@ pub fn generate_world_mesh(
     heightmap: Res<Heightmap>,
     world_settings: Res<WorldSettings>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
+    mut material_assets: ResMut<Assets<StandardMaterial>>,
     terrain_texture_atlas: Res<TerrainTextureAtlas>,
 ) {
     if world_mesh_query.is_empty() || heightmap.is_changed() {
+        //Generate Water Mesh
+        commands.spawn(PbrBundle {
+            mesh: mesh_assets.add(
+                Plane3d::default()
+                    .mesh()
+                    .size(TILE_WORLD_SIZE[0] as f32, TILE_WORLD_SIZE[1] as f32),
+            ),
+            material: material_assets.add(Color::BLUE),
+            transform: Transform::from_translation(Vec3::new(
+                TILE_WORLD_SIZE[0] as f32 / 2.0,
+                world_settings.water_level as f32,
+                TILE_WORLD_SIZE[1] as f32 / 2.0,
+            )),
+            ..default()
+        });
+
         let start_time = std::time::Instant::now();
         let mut random_number_generator = StdRng::seed_from_u64(world_settings.seed() as u64);
         for entity in world_mesh_query.iter() {
@@ -184,7 +202,7 @@ fn get_terrain_type(height: f32, steepness_angle: f32, rng: &mut StdRng) -> Terr
     //Snow
     let height_variance = (height * 0.1).max(0.1);
     let height_noise = rng.gen_range(-height_variance..height_variance);
-    if height + height_noise > WORLD_HEIGHT_SCALE * 0.5 {
+    if height + height_noise > SNOW_HEIGHT {
         if terrain_type == TerrainType::Stone {
             let stone_to_snow_chance = 0.2;
             if stone_to_snow_chance > rng.gen_range(0.0..1.0) {

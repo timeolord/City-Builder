@@ -22,7 +22,7 @@ use crate::{
 };
 
 use self::{
-    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE},
+    consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE, WORLD_HEIGHT_SCALE},
     erosion::{gpu_erode_heightmap, ErosionComputeFields, ErosionComputeWorker, ErosionEvent},
     heightmap::{Heightmap, HeightmapImage},
     mesh_gen::generate_world_mesh,
@@ -67,6 +67,7 @@ impl Plugin for WorldGenPlugin {
 fn update_heightmap_image(
     mut heightmap: ResMut<Heightmap>,
     heightmap_image: ResMut<HeightmapImage>,
+    world_settings: Res<WorldSettings>,
     progress_bar: Res<HeightmapLoadBar>,
     erosion_worker: ResMut<AppComputeWorker<ErosionComputeWorker>>,
     mut image_assets: ResMut<Assets<Image>>,
@@ -81,7 +82,7 @@ fn update_heightmap_image(
         let old_image = image_assets
             .get_mut(heightmap_image.image.clone_weak())
             .unwrap();
-        let new_image = heightmap.clone().as_bevy_image();
+        let new_image = heightmap.clone().as_bevy_image(&world_settings);
         *old_image = new_image;
         *counter = 0;
     }
@@ -90,6 +91,7 @@ fn update_heightmap_image(
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldSettings {
     pub noise_settings: NoiseSettings,
+    pub water_level: u32,
     pub erosion_amount: u32,
 }
 
@@ -98,6 +100,7 @@ impl Default for WorldSettings {
         Self {
             noise_settings: NoiseSettings::default(),
             erosion_amount: 50,
+            water_level: 10,
         }
     }
 }
@@ -123,7 +126,7 @@ fn init(mut commands: Commands, mut image_assets: ResMut<Assets<Image>>) {
     commands.init_resource::<WorldSettings>();
     let heightmap = Heightmap::new(CHUNK_WORLD_SIZE);
     commands.insert_resource(HeightmapImage {
-        image: image_assets.add(heightmap.clone().as_bevy_image()),
+        image: image_assets.add(heightmap.clone().as_bevy_image(&WorldSettings::default())),
         size: heightmap.size().into(),
     });
     commands.insert_resource(heightmap);
@@ -277,6 +280,16 @@ fn display_ui(
                     ui.add(
                         egui::Slider::new(&mut world_settings.erosion_amount, 0..=100)
                             .clamp_to_range(true),
+                    );
+                    ui.end_row();
+
+                    ui.label("Sea Level");
+                    ui.add(
+                        egui::Slider::new(
+                            &mut world_settings.water_level,
+                            0..=WORLD_HEIGHT_SCALE as u32 / 2,
+                        )
+                        .clamp_to_range(true),
                     );
                     ui.end_row();
                 });
