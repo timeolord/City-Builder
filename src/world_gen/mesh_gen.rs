@@ -1,6 +1,8 @@
 use bevy::{
     prelude::*,
+    reflect::List,
     render::{mesh::Indices, render_asset::RenderAssetUsages, render_resource::PrimitiveTopology},
+    tasks::{block_on, ComputeTaskPool},
 };
 
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
@@ -20,6 +22,8 @@ use crate::{
 pub struct WorldMesh;
 #[derive(Component)]
 pub struct TreeMesh;
+#[derive(Component)]
+pub struct WaterMesh;
 
 use super::{
     consts::{SNOW_HEIGHT, TILE_SIZE, WORLD_HEIGHT_SCALE},
@@ -34,77 +38,95 @@ pub fn generate_world_mesh(
     world_mesh_query: Query<Entity, With<WorldMesh>>,
     heightmap: Res<Heightmap>,
     world_settings: Res<WorldSettings>,
+    water_mesh: Query<Entity, With<WaterMesh>>,
     mut mesh_assets: ResMut<Assets<Mesh>>,
     mut material_assets: ResMut<Assets<StandardMaterial>>,
     terrain_texture_atlas: Res<TerrainTextureAtlas>,
 ) {
     if world_mesh_query.is_empty() || heightmap.is_changed() {
         //Generate Water Mesh
-        commands.spawn(PbrBundle {
-            mesh: mesh_assets.add(
-                Plane3d::default()
-                    .mesh()
-                    .size(TILE_WORLD_SIZE[0] as f32, TILE_WORLD_SIZE[1] as f32),
-            ),
-            material: material_assets.add(Color::BLUE),
-            transform: Transform::from_translation(Vec3::new(
-                TILE_WORLD_SIZE[0] as f32 / 2.0,
-                world_settings.water_level as f32,
-                TILE_WORLD_SIZE[1] as f32 / 2.0,
-            )),
-            ..default()
-        });
+        if water_mesh.is_empty() {
+            commands
+                .spawn(PbrBundle {
+                    mesh: mesh_assets.add(
+                        Plane3d::default()
+                            .mesh()
+                            .size(TILE_WORLD_SIZE[0] as f32, TILE_WORLD_SIZE[1] as f32),
+                    ),
+                    material: material_assets.add(Color::BLUE),
+                    transform: Transform::from_translation(Vec3::new(
+                        TILE_WORLD_SIZE[0] as f32 / 2.0,
+                        world_settings.water_level as f32,
+                        TILE_WORLD_SIZE[1] as f32 / 2.0,
+                    )),
+                    ..default()
+                })
+                .insert(WaterMesh);
+        }
 
         let start_time = std::time::Instant::now();
-        let mut random_number_generator = StdRng::seed_from_u64(world_settings.seed() as u64);
+
+        let random_number_generator = StdRng::seed_from_u64(world_settings.seed() as u64);
+
+        //Despawn old meshes
         for entity in world_mesh_query.iter() {
             commands.entity(entity).despawn();
         }
 
-        for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
-            for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
-                let mut grid_mesh = Mesh::new(
-                    PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::RENDER_WORLD,
-                );
-
-                let mut vertices = Vec::new();
-                let mut uvs = Vec::new();
-                let mut indices = Vec::new();
-                let mut normals = Vec::new();
-
-                for y in 0..CHUNK_SIZE {
-                    for x in 0..CHUNK_SIZE {
-                        let (new_vertices, uv, index, normal) = create_terrain_mesh(
-                            [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
-                            &heightmap,
-                            &mut random_number_generator,
+        let thread_pool = ComputeTaskPool::get();
+        let heightmap_ref = &heightmap;
+        let results = thread_pool.scope(|s| {
+            for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
+                for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
+                    let mut rng = random_number_generator.clone();
+                    s.spawn(async move {
+                        let mut grid_mesh = Mesh::new(
+                            PrimitiveTopology::TriangleList,
+                            RenderAssetUsages::RENDER_WORLD,
                         );
-                        vertices.extend(new_vertices);
-                        uvs.extend(uv);
-                        indices.extend(index);
-                        normals.extend(normal);
-                    }
+                        let mut vertices = Vec::new();
+                        let mut uvs = Vec::new();
+                        let mut indices = Vec::new();
+                        let mut normals = Vec::new();
+
+                        for y in 0..CHUNK_SIZE {
+                            for x in 0..CHUNK_SIZE {
+                                let (new_vertices, uv, index, normal) = create_terrain_mesh(
+                                    [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
+                                    heightmap_ref,
+                                    &mut rng,
+                                );
+                                vertices.extend(new_vertices);
+                                uvs.extend(uv);
+                                indices.extend(index);
+                                normals.extend(normal);
+                            }
+                        }
+
+                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+
+                        grid_mesh.insert_indices(Indices::U32(indices));
+
+                        grid_mesh
+                    });
                 }
-
-                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-
-                grid_mesh.insert_indices(Indices::U32(indices));
-                let mesh = mesh_assets.add(grid_mesh);
-
-                let material = terrain_texture_atlas.handle.clone();
-
-                commands
-                    .spawn(PbrBundle {
-                        mesh,
-                        material,
-                        ..Default::default()
-                    })
-                    .insert(WorldMesh)
-                    .insert(WorldEntity);
             }
+        });
+        for mesh in results {
+            let mesh = mesh_assets.add(mesh);
+
+            let material = terrain_texture_atlas.handle.clone();
+
+            commands
+                .spawn(PbrBundle {
+                    mesh,
+                    material,
+                    ..Default::default()
+                })
+                .insert(WorldMesh)
+                .insert(WorldEntity);
         }
         println!("World mesh generation took: {:?}", start_time.elapsed());
     }
