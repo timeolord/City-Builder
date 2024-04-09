@@ -99,7 +99,7 @@ impl Default for WorldSettings {
     fn default() -> Self {
         Self {
             noise_settings: NoiseSettings::default(),
-            erosion_amount: 50,
+            erosion_amount: 0,
             water_level: 10,
         }
     }
@@ -178,8 +178,8 @@ fn generate_heightmap(
         let noise_settings = world_settings.noise_settings;
 
         //Seperate each chunk into its own task to be processed in parallel, and over multiple frames
-        for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
-            for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
+        for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
+            for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
                 let task = thread_pool.spawn(async move {
                     let perlin = noise_function(noise_settings);
                     let mut results =

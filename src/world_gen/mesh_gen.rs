@@ -5,7 +5,9 @@ use bevy::{
     tasks::{block_on, ComputeTaskPool},
 };
 
+use itertools::Itertools;
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
+use strum::IntoEnumIterator;
 
 use crate::{
     assets::{get_terrain_texture_uv, TerrainTextureAtlas, TerrainType},
@@ -55,9 +57,9 @@ pub fn generate_world_mesh(
                     ),
                     material: material_assets.add(Color::BLUE),
                     transform: Transform::from_translation(Vec3::new(
-                        TILE_WORLD_SIZE[0] as f32 / 2.0,
+                        (TILE_WORLD_SIZE[0] as f32 / 2.0) - TILE_SIZE / 2.,
                         world_settings.water_level as f32,
-                        TILE_WORLD_SIZE[1] as f32 / 2.0,
+                        (TILE_WORLD_SIZE[1] as f32 / 2.0) - TILE_SIZE / 2.,
                     )),
                     ..default()
                 })
@@ -73,11 +75,12 @@ pub fn generate_world_mesh(
             commands.entity(entity).despawn();
         }
 
+        //Generate chunk meshes
         let thread_pool = ComputeTaskPool::get();
         let heightmap_ref = &heightmap;
         let results = thread_pool.scope(|s| {
-            for chunk_y in 0..CHUNK_WORLD_SIZE[0] {
-                for chunk_x in 0..CHUNK_WORLD_SIZE[1] {
+            for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
+                for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
                     let mut rng = random_number_generator.clone();
                     s.spawn(async move {
                         let mut grid_mesh = Mesh::new(
@@ -128,11 +131,237 @@ pub fn generate_world_mesh(
                 .insert(WorldMesh)
                 .insert(WorldEntity);
         }
+        //Generate Edge meshes
+        let results = thread_pool.scope(|s| {
+            for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
+                for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
+                    let mut x_offset = 0;
+                    let mut y_offset = 0;
+                    let x_direction = match chunk_x {
+                        0 => Some(FaceDirection::East),
+                        x if x == CHUNK_WORLD_SIZE[0] - 1 => {
+                            x_offset = CHUNK_SIZE - 1;
+                            Some(FaceDirection::West)
+                        }
+                        _ => None,
+                    };
+                    let y_direction = match chunk_y {
+                        0 => Some(FaceDirection::South),
+                        y if y == CHUNK_WORLD_SIZE[1] - 1 => {
+                            y_offset = CHUNK_SIZE - 1;
+                            Some(FaceDirection::North)
+                        }
+                        _ => None,
+                    };
+                    if let Some(direction) = x_direction {
+                        s.spawn(async move {
+                            let mut grid_mesh = Mesh::new(
+                                PrimitiveTopology::TriangleList,
+                                RenderAssetUsages::RENDER_WORLD,
+                            );
+                            let mut vertices = Vec::new();
+                            let mut uvs = Vec::new();
+                            let mut indices = Vec::new();
+                            let mut normals = Vec::new();
+                            let mut indices_count = 0;
+
+                            for y in 0..CHUNK_SIZE {
+                                let (new_vertices, uv, index, normal) = create_terrain_edge_mesh(
+                                    [
+                                        (chunk_x * CHUNK_SIZE) + x_offset,
+                                        (chunk_y * CHUNK_SIZE) + y,
+                                    ],
+                                    heightmap_ref,
+                                    direction,
+                                    indices_count,
+                                );
+                                indices_count += new_vertices.len() as u32;
+                                vertices.extend(new_vertices);
+                                uvs.extend(uv);
+                                indices.extend(index);
+                                normals.extend(normal);
+                            }
+
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+
+                            grid_mesh.insert_indices(Indices::U32(indices));
+
+                            grid_mesh
+                        });
+                    }
+                    if let Some(direction) = y_direction {
+                        s.spawn(async move {
+                            let mut grid_mesh = Mesh::new(
+                                PrimitiveTopology::TriangleList,
+                                RenderAssetUsages::RENDER_WORLD,
+                            );
+                            let mut vertices = Vec::new();
+                            let mut uvs = Vec::new();
+                            let mut indices = Vec::new();
+                            let mut normals = Vec::new();
+                            let mut indices_count = 0;
+
+                            for x in 0..CHUNK_SIZE {
+                                let (new_vertices, uv, index, normal) = create_terrain_edge_mesh(
+                                    [
+                                        (chunk_x * CHUNK_SIZE) + x,
+                                        (chunk_y * CHUNK_SIZE) + y_offset,
+                                    ],
+                                    heightmap_ref,
+                                    direction,
+                                    indices_count,
+                                );
+                                indices_count += new_vertices.len() as u32;
+                                vertices.extend(new_vertices);
+                                uvs.extend(uv);
+                                indices.extend(index);
+                                normals.extend(normal);
+                            }
+
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+
+                            grid_mesh.insert_indices(Indices::U32(indices));
+
+                            grid_mesh
+                        });
+                    }
+                }
+            }
+        });
+        for mesh in results {
+            let mesh = mesh_assets.add(mesh);
+
+            let material = terrain_texture_atlas.handle.clone();
+
+            commands
+                .spawn(PbrBundle {
+                    mesh,
+                    material,
+                    ..Default::default()
+                })
+                .insert(WorldMesh)
+                .insert(WorldEntity);
+        }
         println!("World mesh generation took: {:?}", start_time.elapsed());
     }
 }
 
 type MeshVecs = (Vec<[f32; 3]>, Vec<[f32; 2]>, Vec<u32>, Vec<[f32; 3]>);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FaceDirection {
+    North,
+    East,
+    South,
+    West,
+}
+
+fn create_terrain_edge_mesh(
+    starting_position: [u32; 2],
+    heightmap: &Heightmap,
+    side: FaceDirection,
+    indices_count: u32,
+) -> MeshVecs {
+    let mut vertices_ = Vec::new();
+    let mut uvs_ = Vec::new();
+    let mut indices_ = Vec::new();
+    let mut normals_ = Vec::new();
+    let mut indices_count = indices_count;
+    let edge_depth = WORLD_HEIGHT_SCALE as u32 / 2;
+    for current_depth in 0..edge_depth {
+        let positions = match side {
+            FaceDirection::North => [
+                [starting_position[0], starting_position[1] + 1],
+                [starting_position[0] + 1, starting_position[1] + 1],
+            ],
+            FaceDirection::East => [
+                [starting_position[0], starting_position[1] + 1],
+                starting_position,
+            ],
+            FaceDirection::South => [
+                [starting_position[0], starting_position[1]],
+                [starting_position[0] + 1, starting_position[1]],
+            ],
+            FaceDirection::West => [
+                [starting_position[0] + 1, starting_position[1]],
+                [starting_position[0] + 1, starting_position[1] + 1],
+            ],
+        };
+        let tile_size = 0.5 * TILE_SIZE;
+
+        let offsets = [-tile_size * TILE_SIZE, -tile_size * TILE_SIZE];
+        let heights = [
+            (heightmap[positions[0]] * WORLD_HEIGHT_SCALE) - (current_depth as f32 * TILE_SIZE),
+            (heightmap[positions[1]] * WORLD_HEIGHT_SCALE) - (current_depth as f32 * TILE_SIZE),
+        ];
+
+        let vert_0 = [
+            positions[0][0] as f32 + offsets[0],
+            heights[0],
+            positions[0][1] as f32 + offsets[1],
+        ];
+        let vert_1 = [
+            positions[1][0] as f32 + offsets[0],
+            heights[1],
+            positions[1][1] as f32 + offsets[1],
+        ];
+        let vert_2 = [
+            positions[1][0] as f32 + offsets[0],
+            heights[1] - TILE_SIZE,
+            positions[1][1] as f32 + offsets[1],
+        ];
+        let vert_3 = [
+            positions[0][0] as f32 + offsets[0],
+            heights[0] - TILE_SIZE,
+            positions[0][1] as f32 + offsets[1],
+        ];
+
+        let vertices = vec![vert_0, vert_1, vert_2, vert_3];
+
+        let indices = match side {
+            FaceDirection::North => vec![
+                indices_count + 2,
+                indices_count + 1,
+                indices_count,
+                indices_count,
+                indices_count + 3,
+                indices_count + 2,
+            ],
+            FaceDirection::East | FaceDirection::South | FaceDirection::West => vec![
+                indices_count,
+                indices_count + 1,
+                indices_count + 2,
+                indices_count + 2,
+                indices_count + 3,
+                indices_count,
+            ],
+        };
+        let normal = unnormalized_normal_array(vert_0, vert_3, vert_1)
+            .normalize_or_zero()
+            .to_array();
+        let normals = match side {
+            FaceDirection::South => {
+                let normal = [-normal[0], -normal[1], -normal[2]];
+                vec![normal, normal, normal, normal]
+            }
+            FaceDirection::East | FaceDirection::North | FaceDirection::West => {
+                vec![normal, normal, normal, normal]
+            }
+        };
+
+        let uv = get_terrain_texture_uv(TerrainType::Dirt).to_vec();
+        indices_count += vertices.len() as u32;
+
+        vertices_.extend(vertices);
+        uvs_.extend(uv);
+        indices_.extend(indices);
+        normals_.extend(normals);
+    }
+    (vertices_, uvs_, indices_, normals_)
+}
 
 fn create_terrain_mesh(
     starting_position: [u32; 2],

@@ -12,7 +12,9 @@ use smooth_bevy_cameras::{
 use crate::{
     world::WorldEntity,
     world_gen::{
-        consts::{CHUNK_SIZE, TILE_WORLD_SIZE, WORLD_HEIGHT_SCALE}, heightmap::Heightmap, WorldSettings,
+        consts::{CHUNK_SIZE, TILE_WORLD_SIZE, WORLD_HEIGHT_SCALE},
+        heightmap::Heightmap,
+        WorldSettings,
     },
     GameState, DEBUG,
 };
@@ -46,7 +48,7 @@ pub fn input(
     keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
     mut cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
-    _world_settings: Res<WorldSettings>,
+    world_settings: Res<WorldSettings>,
     mut gizmos: Gizmos,
     heightmap: Res<Heightmap>,
 ) {
@@ -142,20 +144,24 @@ pub fn input(
 
     //Restrict Camera to world bounds
     let eye_delta = transform.eye - transform.target;
+    let clamp_factor = 0.01;
     transform.target.x = transform.target.x.clamp(
-        CHUNK_SIZE as f32 * 0.5,
-        TILE_WORLD_SIZE[0] as f32 - (CHUNK_SIZE as f32 * 0.5),
+        CHUNK_SIZE as f32 * clamp_factor,
+        TILE_WORLD_SIZE[0] as f32 - (CHUNK_SIZE as f32 * clamp_factor),
     );
     transform.target.z = transform.target.z.clamp(
-        CHUNK_SIZE as f32 * 0.5,
-        TILE_WORLD_SIZE[1] as f32 - (CHUNK_SIZE as f32 * 0.5),
+        CHUNK_SIZE as f32 * clamp_factor,
+        TILE_WORLD_SIZE[1] as f32 - (CHUNK_SIZE as f32 * clamp_factor),
     );
     transform.eye = transform.target + eye_delta;
 
-    //Set target y to terrain height
-    transform.target.y = heightmap.interpolate_height(transform.target.xz());
+    //Set target y to terrain height or ocean height
+    transform.target.y = heightmap
+        .interpolate_height(transform.target.xz())
+        .max(world_settings.water_level as f32 + 0.5);
 
     if DEBUG {
+        println!("Eye: {:?} Target: {:?}", transform.eye, transform.target);
         gizmos.sphere(transform.target, Quat::IDENTITY, 0.1, Color::RED);
     }
 
