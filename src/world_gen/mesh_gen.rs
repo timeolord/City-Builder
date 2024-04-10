@@ -48,15 +48,23 @@ pub fn level_of_detail(
             (chunk_position.0[0] as f32 * CHUNK_SIZE as f32) + CHUNK_SIZE as f32 / 2.0,
             (chunk_position.0[1] as f32 * CHUNK_SIZE as f32) + CHUNK_SIZE as f32 / 2.0,
         ];
-        //let camera_position = transform.eye.xz();
-        let camera_position = Vec2::new(
+        let camera_position = transform.eye.xz();
+        let target_position = transform.target.xz();
+        /* let camera_position = Vec2::new(
             (CHUNK_WORLD_SIZE[0] * CHUNK_SIZE) as f32 * 0.5,
             (CHUNK_WORLD_SIZE[1] * CHUNK_SIZE) as f32 * 0.5,
-        );
-        let distance = ((camera_position.distance(Vec2::new(chunk_position[0], chunk_position[1]))
+        ); */
+        let camera_distance = ((camera_position
+            .distance(Vec2::new(chunk_position[0], chunk_position[1]))
             / CHUNK_SIZE as f32)
             .round() as u32)
             .clamp(1, LOD_LEVELS);
+        let target_distance = ((target_position
+            .distance(Vec2::new(chunk_position[0], chunk_position[1]))
+            / CHUNK_SIZE as f32)
+            .round() as u32)
+            .clamp(1, LOD_LEVELS);
+        let distance = camera_distance.min(target_distance);
         //Show the correct LOD mesh based on distance
         if lod.0 != distance {
             *visibility = Visibility::Hidden;
@@ -111,7 +119,8 @@ pub fn generate_world_mesh(
         //Generate chunk meshes
         let thread_pool = ComputeTaskPool::get();
         let heightmap_ref = &heightmap;
-        for lod in 1..=LOD_LEVELS as usize {
+        for lod_count in 0..=LOD_LEVELS as usize {
+            let lod = if lod_count == 0 { 1 } else { lod_count * 2 };
             let results = thread_pool.scope(|s| {
                 for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
                     for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
@@ -127,14 +136,31 @@ pub fn generate_world_mesh(
                             let mut normals = Vec::new();
                             let mut indices_count = 0;
 
-                            for y in (0..CHUNK_SIZE).step_by(lod * 2) {
-                                for x in (0..CHUNK_SIZE).step_by(lod * 2) {
+                            for y in 0..CHUNK_SIZE {
+                                for x in 0..CHUNK_SIZE {
+                                    /* let decreased_lod = lod.saturating_sub(1).max(1);
+                                    //Decrease the LOD level by 1 for the edges for seamless LOD transitions
+                                    let current_lod = if (y == 0
+                                        || y == CHUNK_SIZE - 1
+                                        || x == 0
+                                        || x == CHUNK_SIZE - 1)
+                                        && ((y as usize) % (decreased_lod) == 0
+                                            && (x as usize) % (decreased_lod) == 0)
+                                    {
+                                        decreased_lod
+                                    } else  */
+                                    if (y as usize) % (lod) == 0 && (x as usize) % (lod) == 0 {
+                                        /* continue; */
+                                        lod
+                                    } else {
+                                        continue;
+                                    };
                                     let (new_vertices, uv, index, normal) = create_terrain_mesh(
                                         [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
                                         heightmap_ref,
                                         &mut rng,
                                         indices_count,
-                                        lod * 2,
+                                        lod as u32,
                                     );
                                     indices_count += new_vertices.len() as u32;
                                     vertices.extend(new_vertices);
@@ -168,7 +194,7 @@ pub fn generate_world_mesh(
                     })
                     .insert(WorldMesh)
                     .insert(WorldEntity)
-                    .insert(LODLevel(lod as u32))
+                    .insert(LODLevel(lod_count as u32))
                     .insert(ChunkPosition(position));
             }
         }
@@ -409,47 +435,43 @@ fn create_terrain_mesh(
     heightmap: &Heightmap,
     rng: &mut StdRng,
     indices_count: u32,
-    lod: usize,
+    lod: u32,
 ) -> MeshVecs {
-    let tile_size = 0.5 * TILE_SIZE * lod as f32;
-    let lod_offset = (lod - 1) as u32;
+    let tile_size = TILE_SIZE * lod as f32;
     let height = heightmap[starting_position] * WORLD_HEIGHT_SCALE;
     let mut average_height = height;
     let vert_0 = [
-        starting_position[0] as f32 - tile_size * TILE_SIZE,
+        starting_position[0] as f32,
         height,
-        starting_position[1] as f32 - tile_size * TILE_SIZE,
+        starting_position[1] as f32,
     ];
     let height = heightmap[[
-        (starting_position[0] + 1 + lod_offset).clamp(0, heightmap.size()[0]),
+        (starting_position[0] + lod).clamp(0, heightmap.size()[0]),
         starting_position[1],
-    ]] as f32
-        * WORLD_HEIGHT_SCALE;
+    ]] * WORLD_HEIGHT_SCALE;
     average_height += height;
     let vert_1 = [
-        starting_position[0] as f32 + tile_size * TILE_SIZE,
+        starting_position[0] as f32 + tile_size,
         height,
-        starting_position[1] as f32 - tile_size * TILE_SIZE,
+        starting_position[1] as f32,
     ];
     let height = heightmap[[
-        (starting_position[0] + 1 + lod_offset).clamp(0, heightmap.size()[0]),
-        (starting_position[1] + 1 + lod_offset).clamp(0, heightmap.size()[1]),
-    ]] as f32
-        * WORLD_HEIGHT_SCALE;
+        (starting_position[0] + lod).clamp(0, heightmap.size()[0]),
+        (starting_position[1] + lod).clamp(0, heightmap.size()[1]),
+    ]] * WORLD_HEIGHT_SCALE;
     average_height += height;
     let vert_2 = [
-        starting_position[0] as f32 + tile_size * TILE_SIZE,
+        starting_position[0] as f32 + tile_size,
         height,
-        starting_position[1] as f32 + tile_size * TILE_SIZE,
+        starting_position[1] as f32 + tile_size,
     ];
     let height = heightmap[[
         starting_position[0],
-        (starting_position[1] + 1 + lod_offset).clamp(0, heightmap.size()[1]),
-    ]] as f32
-        * WORLD_HEIGHT_SCALE;
+        (starting_position[1] + lod).clamp(0, heightmap.size()[1]),
+    ]] * WORLD_HEIGHT_SCALE;
     average_height += height;
     let vert_3 = [
-        starting_position[0] as f32 - tile_size * TILE_SIZE,
+        starting_position[0] as f32,
         height,
         starting_position[1] as f32 + tile_size * TILE_SIZE,
     ];
