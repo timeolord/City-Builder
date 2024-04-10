@@ -38,7 +38,9 @@ egui_file = "0.16.2"
 bevy_mod_debugdump = "0.10"
 num = "0.4.1"
 bytemuck = "1.15.0"
-bevy_app_compute = { path = "C:\\Users\\awei3\\Desktop\\compute_shader_fork\\bevy_app_compute" }
+bevy_app_compute = { path = "C:\\Users\\awei3\\Desktop\\compute_shader_fork\\bevy_app_compute"}
+bumpalo = { version = "3.16.0", features = ["boxed", "collections"] }
+bumpalo-herd = "0.1.2"
 #bevy_app_compute = { git = "https://github.com/timeolord/bevy_app_compute.git" }
 
 [dependencies.bevy]

@@ -17,3 +17,5 @@ pub const MIN_DROPLET_SIZE: u32 = 2;
 pub const EROSION_WORKGROUP_SIZE: u64 = 64;
 pub const EROSION_DISPATCH_SIZE: u64 = 16;
 pub const MAX_EROSION_STEPS: u64 = 500;
+
+pub const LOD_LEVELS: u32 = 5;

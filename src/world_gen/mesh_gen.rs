@@ -7,6 +7,7 @@ use bevy::{
 
 use itertools::Itertools;
 use rand::{prelude::Rng, rngs::StdRng, SeedableRng};
+use smooth_bevy_cameras::{controllers::orbit::OrbitCameraController, LookTransform};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -14,7 +15,7 @@ use crate::{
     utils::math::unnormalized_normal_array,
     world::WorldEntity,
     world_gen::{
-        consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE, TILE_WORLD_SIZE},
+        consts::{CHUNK_SIZE, CHUNK_WORLD_SIZE, LOD_LEVELS, TILE_WORLD_SIZE},
         heightmap::Heightmap,
     },
     GameState,
@@ -26,11 +27,44 @@ pub struct WorldMesh;
 pub struct TreeMesh;
 #[derive(Component)]
 pub struct WaterMesh;
+#[derive(Component)]
+pub struct LODLevel(pub u32);
+#[derive(Component)]
+pub struct ChunkPosition(pub [u32; 2]);
 
 use super::{
     consts::{SNOW_HEIGHT, TILE_SIZE, WORLD_HEIGHT_SCALE},
     WorldSettings,
 };
+
+pub fn level_of_detail(
+    mut meshes: Query<(&LODLevel, &ChunkPosition, &mut Visibility)>,
+    cameras: Query<(&OrbitCameraController, &mut LookTransform, &Transform)>,
+) {
+    let (_, transform, _) = cameras.iter().find(|c| c.0.enabled).expect("No camera");
+    for (lod, chunk_position, mut visibility) in meshes.iter_mut() {
+        //Convert chunk position to world position
+        let chunk_position = [
+            (chunk_position.0[0] as f32 * CHUNK_SIZE as f32) + CHUNK_SIZE as f32 / 2.0,
+            (chunk_position.0[1] as f32 * CHUNK_SIZE as f32) + CHUNK_SIZE as f32 / 2.0,
+        ];
+        //let camera_position = transform.eye.xz();
+        let camera_position = Vec2::new(
+            (CHUNK_WORLD_SIZE[0] * CHUNK_SIZE) as f32 * 0.5,
+            (CHUNK_WORLD_SIZE[1] * CHUNK_SIZE) as f32 * 0.5,
+        );
+        let distance = ((camera_position.distance(Vec2::new(chunk_position[0], chunk_position[1]))
+            / CHUNK_SIZE as f32)
+            .round() as u32)
+            .clamp(1, LOD_LEVELS);
+        //Show the correct LOD mesh based on distance
+        if lod.0 != distance {
+            *visibility = Visibility::Hidden;
+        } else {
+            *visibility = Visibility::Visible;
+        }
+    }
+}
 
 #[derive(Resource, Default, Copy, Clone, Debug, Eq, PartialEq)]
 pub struct ExtractedGameState(pub GameState);
@@ -74,62 +108,69 @@ pub fn generate_world_mesh(
         for entity in world_mesh_query.iter() {
             commands.entity(entity).despawn();
         }
-
         //Generate chunk meshes
         let thread_pool = ComputeTaskPool::get();
         let heightmap_ref = &heightmap;
-        let results = thread_pool.scope(|s| {
-            for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
-                for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
-                    let mut rng = random_number_generator.clone();
-                    s.spawn(async move {
-                        let mut grid_mesh = Mesh::new(
-                            PrimitiveTopology::TriangleList,
-                            RenderAssetUsages::RENDER_WORLD,
-                        );
-                        let mut vertices = Vec::new();
-                        let mut uvs = Vec::new();
-                        let mut indices = Vec::new();
-                        let mut normals = Vec::new();
+        for lod in 1..=LOD_LEVELS as usize {
+            let results = thread_pool.scope(|s| {
+                for chunk_y in 0..CHUNK_WORLD_SIZE[1] {
+                    for chunk_x in 0..CHUNK_WORLD_SIZE[0] {
+                        let mut rng = random_number_generator.clone();
+                        s.spawn(async move {
+                            let mut grid_mesh = Mesh::new(
+                                PrimitiveTopology::TriangleList,
+                                RenderAssetUsages::RENDER_WORLD,
+                            );
+                            let mut vertices = Vec::new();
+                            let mut uvs = Vec::new();
+                            let mut indices = Vec::new();
+                            let mut normals = Vec::new();
+                            let mut indices_count = 0;
 
-                        for y in 0..CHUNK_SIZE {
-                            for x in 0..CHUNK_SIZE {
-                                let (new_vertices, uv, index, normal) = create_terrain_mesh(
-                                    [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
-                                    heightmap_ref,
-                                    &mut rng,
-                                );
-                                vertices.extend(new_vertices);
-                                uvs.extend(uv);
-                                indices.extend(index);
-                                normals.extend(normal);
+                            for y in (0..CHUNK_SIZE).step_by(lod * 2) {
+                                for x in (0..CHUNK_SIZE).step_by(lod * 2) {
+                                    let (new_vertices, uv, index, normal) = create_terrain_mesh(
+                                        [(chunk_x * CHUNK_SIZE) + x, (chunk_y * CHUNK_SIZE) + y],
+                                        heightmap_ref,
+                                        &mut rng,
+                                        indices_count,
+                                        lod * 2,
+                                    );
+                                    indices_count += new_vertices.len() as u32;
+                                    vertices.extend(new_vertices);
+                                    uvs.extend(uv);
+                                    indices.extend(index);
+                                    normals.extend(normal);
+                                }
                             }
-                        }
 
-                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
-                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-                        grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+                            grid_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
 
-                        grid_mesh.insert_indices(Indices::U32(indices));
+                            grid_mesh.insert_indices(Indices::U32(indices));
 
-                        grid_mesh
-                    });
+                            (grid_mesh, [chunk_x, chunk_y])
+                        });
+                    }
                 }
+            });
+            for (mesh, position) in results {
+                let mesh = mesh_assets.add(mesh);
+
+                let material = terrain_texture_atlas.handle.clone();
+
+                commands
+                    .spawn(PbrBundle {
+                        mesh,
+                        material,
+                        ..Default::default()
+                    })
+                    .insert(WorldMesh)
+                    .insert(WorldEntity)
+                    .insert(LODLevel(lod as u32))
+                    .insert(ChunkPosition(position));
             }
-        });
-        for mesh in results {
-            let mesh = mesh_assets.add(mesh);
-
-            let material = terrain_texture_atlas.handle.clone();
-
-            commands
-                .spawn(PbrBundle {
-                    mesh,
-                    material,
-                    ..Default::default()
-                })
-                .insert(WorldMesh)
-                .insert(WorldEntity);
         }
         //Generate Edge meshes
         let results = thread_pool.scope(|s| {
@@ -232,20 +273,20 @@ pub fn generate_world_mesh(
                 }
             }
         });
-        for mesh in results {
-            let mesh = mesh_assets.add(mesh);
-
-            let material = terrain_texture_atlas.handle.clone();
-
-            commands
-                .spawn(PbrBundle {
-                    mesh,
-                    material,
-                    ..Default::default()
-                })
-                .insert(WorldMesh)
-                .insert(WorldEntity);
-        }
+        let edge_mesh = results.into_iter().reduce(|mut mesh_a, mesh_b| {
+            mesh_a.merge(mesh_b);
+            mesh_a
+        });
+        let mesh = mesh_assets.add(edge_mesh.unwrap());
+        let material = terrain_texture_atlas.handle.clone();
+        commands
+            .spawn(PbrBundle {
+                mesh,
+                material,
+                ..Default::default()
+            })
+            .insert(WorldMesh)
+            .insert(WorldEntity);
         println!("World mesh generation took: {:?}", start_time.elapsed());
     }
 }
@@ -367,9 +408,12 @@ fn create_terrain_mesh(
     starting_position: [u32; 2],
     heightmap: &Heightmap,
     rng: &mut StdRng,
+    indices_count: u32,
+    lod: usize,
 ) -> MeshVecs {
-    let tile_size = 0.5 * TILE_SIZE;
-    let height = heightmap[starting_position] as f32 * WORLD_HEIGHT_SCALE;
+    let tile_size = 0.5 * TILE_SIZE * lod as f32;
+    let lod_offset = (lod - 1) as u32;
+    let height = heightmap[starting_position] * WORLD_HEIGHT_SCALE;
     let mut average_height = height;
     let vert_0 = [
         starting_position[0] as f32 - tile_size * TILE_SIZE,
@@ -377,7 +421,7 @@ fn create_terrain_mesh(
         starting_position[1] as f32 - tile_size * TILE_SIZE,
     ];
     let height = heightmap[[
-        (starting_position[0] + 1).clamp(0, heightmap.size()[0]),
+        (starting_position[0] + 1 + lod_offset).clamp(0, heightmap.size()[0]),
         starting_position[1],
     ]] as f32
         * WORLD_HEIGHT_SCALE;
@@ -388,8 +432,8 @@ fn create_terrain_mesh(
         starting_position[1] as f32 - tile_size * TILE_SIZE,
     ];
     let height = heightmap[[
-        (starting_position[0] + 1).clamp(0, heightmap.size()[0]),
-        (starting_position[1] + 1).clamp(0, heightmap.size()[1]),
+        (starting_position[0] + 1 + lod_offset).clamp(0, heightmap.size()[0]),
+        (starting_position[1] + 1 + lod_offset).clamp(0, heightmap.size()[1]),
     ]] as f32
         * WORLD_HEIGHT_SCALE;
     average_height += height;
@@ -400,7 +444,7 @@ fn create_terrain_mesh(
     ];
     let height = heightmap[[
         starting_position[0],
-        (starting_position[1] + 1).clamp(0, heightmap.size()[1]),
+        (starting_position[1] + 1 + lod_offset).clamp(0, heightmap.size()[1]),
     ]] as f32
         * WORLD_HEIGHT_SCALE;
     average_height += height;
@@ -412,9 +456,6 @@ fn create_terrain_mesh(
     average_height /= 4.0;
     let vertices = vec![vert_0, vert_1, vert_2, vert_3];
 
-    let indices_count = ((starting_position[0] + starting_position[1] * CHUNK_SIZE)
-        * vertices.len() as u32)
-        % (CHUNK_SIZE * CHUNK_SIZE * vertices.len() as u32);
     let indices = vec![
         indices_count + 2,
         indices_count + 1,
@@ -423,12 +464,12 @@ fn create_terrain_mesh(
         indices_count + 3,
         indices_count + 2,
     ];
-    let normal_a = unnormalized_normal_array(vert_0, vert_3, vert_1)
+    let normal = unnormalized_normal_array(vert_0, vert_3, vert_1)
         .normalize()
         .to_array();
-    let normals = vec![normal_a, normal_a, normal_a, normal_a];
+    let normals = vec![normal, normal, normal, normal];
 
-    let steepness_angle = Into::<Vec3>::into(normal_a)
+    let steepness_angle = Into::<Vec3>::into(normal)
         .normalize()
         .dot(Vec3::new(0.0, 1.0, 0.0))
         .acos()

@@ -25,7 +25,7 @@ use self::{
     consts::{CHUNK_WORLD_SIZE, HEIGHTMAP_CHUNK_SIZE, WORLD_HEIGHT_SCALE},
     erosion::{gpu_erode_heightmap, ErosionComputeFields, ErosionComputeWorker, ErosionEvent},
     heightmap::{Heightmap, HeightmapImage},
-    mesh_gen::generate_world_mesh,
+    mesh_gen::{generate_world_mesh, level_of_detail},
     noise_gen::{noise_function, NoiseFunction, NoiseSettings},
 };
 use bevy_egui::{
@@ -58,7 +58,7 @@ impl Plugin for WorldGenPlugin {
         );
         app.add_systems(
             Update,
-            (generate_world_mesh).run_if(in_state(GameState::World)),
+            (generate_world_mesh, level_of_detail).run_if(in_state(GameState::World)),
         );
         app.add_systems(OnExit(GameState::WorldGeneration), exit);
     }
