@@ -378,6 +378,7 @@ dependencies = [
 [[package]]
 name = "bevy_app_compute"
 version = "0.13.0"
+source = "git+https://github.com/timeolord/bevy_app_compute.git#84a501d73a5ee2d7e4ec21e9ce1b7fa73fef4c1c"
 dependencies = [
  "bevy",
  "bytemuck",
